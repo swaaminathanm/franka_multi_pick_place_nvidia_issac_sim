@@ -1,0 +1,25 @@
+[package]
+
+# Semantic Versioning is used: https://semver.org/
+version = "0.1.0"
+
+# Description
+category = "isaaclab"
+readme  = "README.md"
+
+title = "Franka Multi Pick and Place"
+author = "NVIDIA"
+maintainer = "NVIDIA"
+description = "Newton-based Franka multi-object pick-and-place (cable and cube into bin) for Isaac Lab"
+repository = "https://github.com/isaac-sim/IsaacLab"
+keywords = ["franka", "newton", "reinforcement-learning", "isaaclab", "manipulation", "multi-object"]
+
+[dependencies]
+"isaaclab" = {}
+"isaaclab_assets" = {}
+"isaaclab_newton" = {}
+"isaaclab_rl" = {}
+"isaaclab_tasks" = {}
+
+[[python.module]]
+name = "franka_multi_pick_place"
