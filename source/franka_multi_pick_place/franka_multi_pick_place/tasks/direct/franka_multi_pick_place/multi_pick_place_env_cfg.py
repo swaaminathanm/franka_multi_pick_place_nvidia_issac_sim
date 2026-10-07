@@ -10,7 +10,7 @@ from isaaclab.assets import ArticulationCfg, RigidObjectCfg
 from isaaclab.envs import DirectRLEnvCfg
 from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.sim import SimulationCfg
-from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR, ISAACLAB_NUCLEUS_DIR
+from isaaclab.utils.assets import ISAACLAB_NUCLEUS_DIR
 from isaaclab.utils.configclass import configclass
 from isaaclab_assets.robots.franka import FRANKA_PANDA_CFG
 from isaaclab_newton.physics import MJWarpSolverCfg, NewtonCfg
@@ -76,7 +76,7 @@ class FrankaMultiPickPlaceEnvCfg(DirectRLEnvCfg):
         ),
     )
 
-    # Robot Articulation
+    # Robot Articulation (Franka Panda)
     robot_cfg: ArticulationCfg = FRANKA_PANDA_CFG.replace(prim_path="/World/envs/env_.*/Robot")
     robot_cfg.spawn.usd_path = f"{ISAACLAB_NUCLEUS_DIR}/Robots/FrankaEmika/Legacy/panda_instanceable.usd"
     robot_cfg.spawn.rigid_props.disable_gravity = True
@@ -130,29 +130,7 @@ class FrankaMultiPickPlaceEnvCfg(DirectRLEnvCfg):
         ),
     )
 
-    # Target Bin / Collection Tray (Receptacle container)
-    bin_size_x: float = 0.16
-    bin_size_y: float = 0.16
-    bin_height: float = 0.05
-    bin_cfg: RigidObjectCfg = RigidObjectCfg(
-        prim_path="/World/envs/env_.*/bin",
-        init_state=RigidObjectCfg.InitialStateCfg(
-            pos=[0.35, 0.30, 0.025],
-            rot=[0.0, 0.0, 0.0, 1.0],
-        ),
-        spawn=sim_utils.UsdFileCfg(
-            usd_path=f"{ISAAC_NUCLEUS_DIR}/Props/Kitting_Tray/kitting_tray.usd",
-            scale=(0.8, 0.8, 0.8),
-            rigid_props=sim_utils.RigidBodyPropertiesCfg(
-                kinematic_enabled=True,
-                disable_gravity=True,
-            ),
-            collision_props=sim_utils.CollisionPropertiesCfg(),
-            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.2, 0.5, 0.8)),
-        ),
-    )
-
-    # Flexible Cable Payload Specifications (0.38m length, 19 segments, radius 0.005m)
+    # Flexible Cable Payload (Length: 0.38m, Radius: 0.005m)
     cable_length: float = 0.38
     cable_segments: int = 19
     cable_radius: float = 0.005
@@ -161,6 +139,66 @@ class FrankaMultiPickPlaceEnvCfg(DirectRLEnvCfg):
     cable_stretch_stiffness: float = 1.0e6
     cable_contact_ke: float = 1.0e4
     cable_contact_kd: float = 1.0e-1
+    cable: RigidObjectCfg = RigidObjectCfg(
+        prim_path="/World/envs/env_.*/cable",
+        init_state=RigidObjectCfg.InitialStateCfg(
+            pos=[0.48, 0.0, 0.005],
+            rot=[0.0, 0.0, 0.0, 1.0],
+        ),
+        spawn=sim_utils.CapsuleCfg(
+            radius=cable_radius,
+            height=cable_length,
+            axis="X",
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(
+                solver_position_iteration_count=32,
+                solver_velocity_iteration_count=2,
+                linear_damping=0.1,
+                angular_damping=0.2,
+                max_angular_velocity=1000.0,
+                max_linear_velocity=1000.0,
+                max_depenetration_velocity=5.0,
+                disable_gravity=False,
+            ),
+            collision_props=sim_utils.CollisionPropertiesCfg(),
+            mass_props=sim_utils.MassPropertiesCfg(density=cable_density),
+            physics_material=sim_utils.RigidBodyMaterialCfg(
+                friction_combine_mode="multiply",
+                restitution_combine_mode="multiply",
+                static_friction=1.2,
+                dynamic_friction=1.2,
+                restitution=0.0,
+            ),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.95, 0.75, 0.1)),
+        ),
+    )
+
+    # Target Bin / Collection Tray (Receptacle container)
+    bin_size_x: float = 0.16
+    bin_size_y: float = 0.16
+    bin_height: float = 0.04
+    bin: RigidObjectCfg = RigidObjectCfg(
+        prim_path="/World/envs/env_.*/bin",
+        init_state=RigidObjectCfg.InitialStateCfg(
+            pos=[0.35, 0.30, 0.02],
+            rot=[0.0, 0.0, 0.0, 1.0],
+        ),
+        spawn=sim_utils.CuboidCfg(
+            size=(bin_size_x, bin_size_y, bin_height),
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(
+                kinematic_enabled=True,
+                disable_gravity=True,
+            ),
+            collision_props=sim_utils.CollisionPropertiesCfg(),
+            physics_material=sim_utils.RigidBodyMaterialCfg(
+                friction_combine_mode="multiply",
+                restitution_combine_mode="multiply",
+                static_friction=1.0,
+                dynamic_friction=1.0,
+                restitution=0.0,
+            ),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.2, 0.5, 0.8)),
+        ),
+    )
 
     # Scene Interactive configuration
     scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=4096, env_spacing=4.0, replicate_physics=True)

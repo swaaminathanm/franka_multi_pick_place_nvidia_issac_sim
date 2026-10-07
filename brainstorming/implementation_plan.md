@@ -27,41 +27,41 @@ Develop a Newton-accelerated, vectorized reinforcement learning environment in I
   - [x] Specify domain randomization boundaries for Cube, Cable, and Bin with minimum spatial separation threshold ($0.12\,\text{m}$).
   - [x] Specify observation space (62 dims) and action space (8 dims).
 
-- [ ] **Step 3: Core Environment Simulation & Randomized Reset (`multi_pick_place_env.py`)**
-  - [ ] Implement `FrankaMultiPickPlaceEnv` inheriting from `isaaclab.envs.DirectRLEnv`.
-  - [ ] Implement `_setup_scene`:
-    - [ ] Spawn SeattleLabTable / Ground plane.
-    - [ ] Spawn Franka Panda Articulation.
-    - [ ] Spawn Rigid Cube.
-    - [ ] Spawn Target Bin receptacle.
-    - [ ] Spawn / initialize Cable payload.
-    - [ ] Register Newton contact callbacks and custom material properties.
-  - [ ] Allocate action, joint target, and previous action tensors.
-  - [ ] Implement `_pre_physics_step`:
-    - [ ] Action clamping to $[-1, 1]$.
-    - [ ] Arm joint position delta integration with `action_scale` and soft limits.
-    - [ ] Gripper open/close position command mapping.
-  - [ ] Implement `_apply_action`:
-    - [ ] Stabilization logic (clamp Newton joint drift).
-    - [ ] Set robot position targets.
-  - [ ] Implement `_reset_idx`:
-    - [ ] Non-overlapping rejection sampling for $(x, y, \theta)$ of Cube, Cable, and Bin across separate table zones.
-    - [ ] Reset robot joints to default ready configuration with optional noise ($\sigma = 0.05\,\text{rad}$).
-    - [ ] Reset velocities to zero.
-    - [ ] Update simulation root states.
-  - [ ] Implement `_get_observations`:
-    - [ ] Robot joint positions and velocities (18).
-    - [ ] End-effector pose and linear velocity (10).
-    - [ ] Cube pose, linear velocity, and relative vector to end-effector (10).
-    - [ ] Cable center pose and relative vector to end-effector (7).
-    - [ ] Bin position and relative offsets: Cube $\to$ Bin, Cable $\to$ Bin (9).
-    - [ ] Previous action buffer (8).
-    - [ ] Total: 62-dimensional observation vector.
-  - [ ] Implement `_get_dones`:
-    - [ ] Episode truncation ($t \ge 10.0\,\text{s}$).
-    - [ ] Object out-of-bounds / fall termination ($z < -0.05\,\text{m}$).
-  - [ ] Implement `_get_rewards`:
-    - [ ] Baseline zero / placeholder reward for agent testing.
+- [x] **Step 3: Core Environment Simulation & Randomized Reset (`multi_pick_place_env.py`)**
+  - [x] Implement `FrankaMultiPickPlaceEnv` inheriting from `isaaclab.envs.DirectRLEnv`.
+  - [x] Implement `_setup_scene`:
+    - [x] Spawn SeattleLabTable / Ground plane.
+    - [x] Spawn Franka Panda Articulation.
+    - [x] Spawn Rigid Cube.
+    - [x] Spawn Target Bin receptacle.
+    - [x] Spawn / initialize Cable payload.
+    - [x] Register Newton contact callbacks and custom material properties.
+  - [x] Allocate action, joint target, and previous action tensors.
+  - [x] Implement `_pre_physics_step`:
+    - [x] Action clamping to $[-1, 1]$.
+    - [x] Arm joint position delta integration with `action_scale` and soft limits.
+    - [x] Gripper open/close position command mapping.
+  - [x] Implement `_apply_action`:
+    - [x] Stabilization logic (clamp Newton joint drift).
+    - [x] Set robot position targets.
+  - [x] Implement `_reset_idx`:
+    - [x] Non-overlapping rejection sampling for $(x, y, \theta)$ of Cube, Cable, and Bin across separate table zones.
+    - [x] Reset robot joints to default ready configuration with optional noise ($\sigma = 0.05\,\text{rad}$).
+    - [x] Reset velocities to zero.
+    - [x] Update simulation root states.
+  - [x] Implement `_get_observations`:
+    - [x] Robot joint positions and velocities (18).
+    - [x] End-effector pose and linear velocity (10).
+    - [x] Cube pose, linear velocity, and relative vector to end-effector (10).
+    - [x] Cable center pose and relative vector to end-effector (7).
+    - [x] Bin position and relative offsets: Cube $\to$ Bin, Cable $\to$ Bin (9).
+    - [x] Previous action buffer (8).
+    - [x] Total: 62-dimensional observation vector.
+  - [x] Implement `_get_dones`:
+    - [x] Episode truncation ($t \ge 10.0\,\text{s}$).
+    - [x] Object out-of-bounds / fall termination ($z < -0.05\,\text{m}$).
+  - [x] Implement `_get_rewards`:
+    - [x] Baseline zero / placeholder reward for agent testing.
 
 - [ ] **Step 4: Zero Action Agent Implementation (`scripts/zero_agent.py`)**
   - [ ] Create `scripts/zero_agent.py` using Isaac Lab launcher arguments.
