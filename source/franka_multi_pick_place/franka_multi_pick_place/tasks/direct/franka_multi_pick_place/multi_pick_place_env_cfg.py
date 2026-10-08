@@ -134,7 +134,7 @@ class FrankaMultiSceneCfg(InteractiveSceneCfg):
     cube: RigidObjectCfg = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/cube",
         init_state=RigidObjectCfg.InitialStateCfg(
-            pos=[0.45, -0.25, 0.02],
+            pos=[0.29, 0.0, 0.02],
             rot=[1.0, 0.0, 0.0, 0.0],
         ),
         spawn=sim_utils.CuboidCfg(
@@ -167,7 +167,7 @@ class FrankaMultiSceneCfg(InteractiveSceneCfg):
     cable: RigidObjectCfg = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/cable",
         init_state=RigidObjectCfg.InitialStateCfg(
-            pos=[0.48, 0.0, 0.0075],
+            pos=[0.50, 0.0, 0.0075],
             rot=[1.0, 0.0, 0.0, 0.0],
         ),
         spawn=sim_utils.CuboidCfg(
@@ -287,14 +287,14 @@ class FrankaMultiPickPlaceEnvCfg(DirectRLEnvCfg):
     action_scale: tuple[float, ...] = (0.45, 1.60, 0.70, 2.70, 0.45, 0.80, 0.30)
     newton_contact: FrankaMultiNewtonContactCfg = FrankaMultiNewtonContactCfg()
 
-    # Reset Spatial Randomization Bounds (Distinct, guaranteed non-overlapping workspace zones)
-    # Right quadrant: Cube
-    cube_reset_pos_x_range: tuple[float, float] = (0.38, 0.55)
-    cube_reset_pos_y_range: tuple[float, float] = (-0.32, -0.18)
+    # Reset bounds. Tabletop y is [-0.5, 0.5]. Y spans that width with an inset so
+    # the payload stays off the lip. X is only a few centimeters, and the two bands
+    # stay apart and in front of the bin (bin body starts near x = 0.645).
+    cube_reset_pos_x_range: tuple[float, float] = (0.27, 0.31)
+    cube_reset_pos_y_range: tuple[float, float] = (-0.43, 0.43)
 
-    # Center quadrant: Cable
-    cable_reset_pos_x_range: tuple[float, float] = (0.40, 0.55)
-    cable_reset_pos_y_range: tuple[float, float] = (-0.05, 0.05)
+    cable_reset_pos_x_range: tuple[float, float] = (0.48, 0.52)
+    cable_reset_pos_y_range: tuple[float, float] = (-0.40, 0.40)
     cable_reset_yaw_range: tuple[float, float] = (-0.35, 0.35)
 
     # Target bin: fixed at the far edge of the table, Y randomized edge to edge.

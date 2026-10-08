@@ -331,7 +331,7 @@ class FrankaMultiPickPlaceEnv(DirectRLEnv):
         cube_pose = self.cube_default_root_pose[env_ids_tensor].clone()
         cable_pose = self.cable_default_root_pose[env_ids_tensor].clone()
 
-        # Sample Cube positions in right quadrant
+        # Cube and cable: full table width in Y, only a few centimeters in X.
         cube_x = sample_uniform(self.cfg.cube_reset_pos_x_range[0], self.cfg.cube_reset_pos_x_range[1], (n,), self.device)
         cube_y = sample_uniform(self.cfg.cube_reset_pos_y_range[0], self.cfg.cube_reset_pos_y_range[1], (n,), self.device)
         cube_z = torch.full((n,), 0.5 * self.cfg.cube_size, device=self.device)
@@ -340,19 +340,17 @@ class FrankaMultiPickPlaceEnv(DirectRLEnv):
         bin_x = torch.full((n,), self.cfg.bin_reset_pos_x, device=self.device)
         bin_y = sample_uniform(self.cfg.bin_reset_pos_y_range[0], self.cfg.bin_reset_pos_y_range[1], (n,), self.device)
 
-        # Sample Cable positions in center quadrant flush on table
         cable_x = sample_uniform(self.cfg.cable_reset_pos_x_range[0], self.cfg.cable_reset_pos_x_range[1], (n,), self.device)
         cable_y = sample_uniform(self.cfg.cable_reset_pos_y_range[0], self.cfg.cable_reset_pos_y_range[1], (n,), self.device)
         cable_z = torch.full((n,), 0.5 * getattr(self.cfg, "cable_thickness", 0.015), device=self.device)
 
-        # Multi-object spatial separation checks to guarantee zero contact at reset
+        # If a sample lands on the cube, slide the cable along Y and keep it on the table.
+        # Shifting X would push it into the bin.
         dist_cube_cable = torch.hypot(cube_x - cable_x, cube_y - cable_y)
         too_close_cube_cable = dist_cube_cable < self.cfg.min_separation_distance
-        cable_x = torch.where(too_close_cube_cable, cable_x + 0.08, cable_x)
-
-        dist_cable_bin = torch.hypot(bin_x - cable_x, bin_y - cable_y)
-        too_close_cable_bin = dist_cable_bin < self.cfg.min_separation_distance
-        cable_x = torch.where(too_close_cable_bin, cable_x + 0.08, cable_x)
+        cable_y = torch.where(too_close_cube_cable, cable_y + self.cfg.min_separation_distance, cable_y)
+        cable_y_lo, cable_y_hi = self.cfg.cable_reset_pos_y_range
+        cable_y = torch.where(cable_y > cable_y_hi, cable_y - (cable_y_hi - cable_y_lo), cable_y)
 
         # Randomize Cable yaw orientation
         cable_yaw = sample_uniform(
@@ -364,7 +362,7 @@ class FrankaMultiPickPlaceEnv(DirectRLEnv):
             cable_yaw,
         )
 
-        # Set Cube pose and velocity
+        # Set Cube pose and velocity. Quaternion stays the spawn orientation from default_root_pose.
         cube_pose[:, 0] = cube_x
         cube_pose[:, 1] = cube_y
         cube_pose[:, 2] = cube_z
@@ -372,6 +370,7 @@ class FrankaMultiPickPlaceEnv(DirectRLEnv):
         cube_vel = torch.zeros_like(cube_pose[:, :6])
         self.cube.write_root_pose_to_sim_index(root_pose=cube_pose, env_ids=env_ids_tensor)
         self.cube.write_root_velocity_to_sim_index(root_velocity=cube_vel, env_ids=env_ids_tensor)
+        self.cube.reset(env_ids_tensor)
 
         # Set Cable pose and velocity
         cable_pose[:, 0] = cable_x
@@ -382,6 +381,7 @@ class FrankaMultiPickPlaceEnv(DirectRLEnv):
         cable_vel = torch.zeros_like(cable_pose[:, :6])
         self.cable.write_root_pose_to_sim_index(root_pose=cable_pose, env_ids=env_ids_tensor)
         self.cable.write_root_velocity_to_sim_index(root_velocity=cable_vel, env_ids=env_ids_tensor)
+        self.cable.reset(env_ids_tensor)
 
         bin_pose = self.bin_default_root_pose[env_ids_tensor].clone()
         bin_pose[:, 0] = bin_x
