@@ -196,7 +196,7 @@ class FrankaMultiSceneCfg(InteractiveSceneCfg):
         init_state=RigidObjectCfg.InitialStateCfg(pos=(0.42, 0.28, 0.1125), rot=(1.0, 0.0, 0.0, 0.0)),
         spawn=sim_utils.UsdFileCfg(
             usd_path=f"{ISAAC_NUCLEUS_DIR}/Props/KLT_Bin/small_KLT.usd",
-            scale=(1.5, 1.5, -1.5),
+            scale=(1.5, 1.5, 1.5),
             rigid_props=sim_utils.RigidBodyPropertiesCfg(
                 kinematic_enabled=True,
                 disable_gravity=True,
