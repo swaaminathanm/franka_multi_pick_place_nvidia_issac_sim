@@ -35,8 +35,6 @@ ENV/
 # Isaac Sim / Logs
 logs/
 *.log
-*.usd
-*.usda
-!source/**/assets/*.usd
-!source/**/assets/*.usda
+logs/**/*.usd
+logs/**/*.usda
 *.viser
