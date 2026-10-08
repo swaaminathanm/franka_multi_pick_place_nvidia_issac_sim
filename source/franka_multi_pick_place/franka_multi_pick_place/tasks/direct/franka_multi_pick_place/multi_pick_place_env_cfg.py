@@ -196,7 +196,7 @@ class FrankaMultiSceneCfg(InteractiveSceneCfg):
     bin: RigidObjectCfg = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/bin",
         init_state=RigidObjectCfg.InitialStateCfg(
-            pos=[0.35, 0.30, 0.005],  # 5mm clearance above tabletop
+            pos=[0.35, 0.30, 0.20],
             rot=[1.0, 0.0, 0.0, 0.0],       
         ),
         spawn=sim_utils.UsdFileCfg(
