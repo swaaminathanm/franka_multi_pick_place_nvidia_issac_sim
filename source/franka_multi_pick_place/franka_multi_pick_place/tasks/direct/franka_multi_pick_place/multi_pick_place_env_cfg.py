@@ -11,12 +11,10 @@ from isaaclab.assets import ArticulationCfg, AssetBaseCfg, RigidObjectCfg
 from isaaclab.envs import DirectRLEnvCfg
 from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.sim import SimulationCfg
-from isaaclab.utils.assets import ISAACLAB_NUCLEUS_DIR
+from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR, ISAACLAB_NUCLEUS_DIR
 from isaaclab.utils.configclass import configclass
 from isaaclab_assets.robots.franka import FRANKA_PANDA_CFG
 from isaaclab_newton.physics import MJWarpSolverCfg, NewtonCfg
-
-from .hollow_bin import HOLLOW_BIN
 
 
 @configclass
@@ -189,12 +187,23 @@ class FrankaMultiSceneCfg(InteractiveSceneCfg):
         ),
     )
 
-    # Built by create_hollow_bin() in hollow_bin.py around (0.35, 0.30, 0.0).
-    bin: RigidObjectCfg = HOLLOW_BIN["bin"]
-    bin_wall_left: RigidObjectCfg = HOLLOW_BIN["bin_wall_left"]
-    bin_wall_right: RigidObjectCfg = HOLLOW_BIN["bin_wall_right"]
-    bin_wall_front: RigidObjectCfg = HOLLOW_BIN["bin_wall_front"]
-    bin_wall_back: RigidObjectCfg = HOLLOW_BIN["bin_wall_back"]
+    # Kinematic KLT crate from Isaac Lab. Scale 2 makes it 0.20 x 0.30 x 0.15 m.
+    # The root at z = 0.15 sits that crate on the table.
+    bin: RigidObjectCfg = RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/bin",
+        init_state=RigidObjectCfg.InitialStateCfg(pos=(0.42, 0.30, 0.15), rot=(1.0, 0.0, 0.0, 0.0)),
+        spawn=sim_utils.UsdFileCfg(
+            usd_path=f"{ISAAC_NUCLEUS_DIR}/Props/KLT_Bin/small_KLT.usd",
+            scale=(2.0, 2.0, 2.0),
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(
+                kinematic_enabled=True,
+                disable_gravity=True,
+                solver_position_iteration_count=4,
+                solver_velocity_iteration_count=0,
+            ),
+            mass_props=sim_utils.MassPropertiesCfg(mass=1.0),
+        ),
+    )
 
 
 @configclass
@@ -257,9 +266,10 @@ class FrankaMultiPickPlaceEnvCfg(DirectRLEnvCfg):
     cable_contact_ke: float = 1.0e4
     cable_contact_kd: float = 1.0e-1
 
-    bin_size_x: float = 0.24
-    bin_size_y: float = 0.24
-    bin_height: float = 0.08
+    bin_size_x: float = 0.20
+    bin_size_y: float = 0.30
+    bin_height: float = 0.15
+    bin_root_z: float = 0.15
 
     # Scene Interactive configuration (Declarative multi-env scene)
     scene: FrankaMultiSceneCfg = FrankaMultiSceneCfg(num_envs=4096, env_spacing=4.0, replicate_physics=True)
