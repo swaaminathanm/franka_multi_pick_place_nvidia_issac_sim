@@ -258,23 +258,6 @@ class FrankaMultiPickPlaceEnvCfg(DirectRLEnvCfg):
     # Scene Interactive configuration (Declarative multi-env scene)
     scene: FrankaMultiSceneCfg = FrankaMultiSceneCfg(num_envs=4096, env_spacing=4.0, replicate_physics=True)
 
-    # Backward compatibility properties for direct asset access
-    @property
-    def robot_cfg(self) -> ArticulationCfg:
-        return self.scene.robot
-
-    @property
-    def cube(self) -> RigidObjectCfg:
-        return self.scene.cube
-
-    @property
-    def cable(self) -> RigidObjectCfg:
-        return self.scene.cable
-
-    @property
-    def bin(self) -> RigidObjectCfg:
-        return self.scene.bin
-
     # Action scaling for Franka 7-DoF arm
     action_scale: tuple[float, ...] = (0.45, 1.60, 0.70, 2.70, 0.45, 0.80, 0.30)
     newton_contact: FrankaMultiNewtonContactCfg = FrankaMultiNewtonContactCfg()
