@@ -109,8 +109,6 @@ def main():
                 obs, rew, terminated, truncated, info = env.step(actions)
 
             step += 1
-            if step % 50 == 0:
-                print(f"[INFO]: Step {step} completed successfully.")
 
             # Headless smoke-test exit condition
             if not sim.visualizers and step >= args_cli.max_steps:

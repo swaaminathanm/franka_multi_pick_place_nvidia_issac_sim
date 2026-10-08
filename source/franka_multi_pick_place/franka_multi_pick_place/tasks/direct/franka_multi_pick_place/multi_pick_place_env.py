@@ -391,6 +391,14 @@ class FrankaMultiPickPlaceEnv(DirectRLEnv):
         self.bin.write_root_pose_to_sim_index(root_pose=bin_pose, env_ids=env_ids_tensor)
         self.bin.write_root_velocity_to_sim_index(root_velocity=bin_vel, env_ids=env_ids_tensor)
 
+        for i in range(n):
+            print(
+                f"[reset] env {int(env_ids_tensor[i])} "
+                f"cube xyz=({cube_x[i]:.3f}, {cube_y[i]:.3f}, {cube_z[i]:.3f}) "
+                f"cable xyz=({cable_x[i]:.3f}, {cable_y[i]:.3f}, {cable_z[i]:.3f}) "
+                f"bin xyz=({bin_x[i]:.3f}, {bin_y[i]:.3f}, {self.cfg.bin_root_z:.3f})"
+            )
+
     # --------------------------------------------------------------------------
     # Newton Physics & MuJoCo Contact Callbacks
     # --------------------------------------------------------------------------
