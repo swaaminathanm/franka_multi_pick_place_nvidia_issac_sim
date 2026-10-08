@@ -271,9 +271,9 @@ class FrankaMultiPickPlaceEnvCfg(DirectRLEnvCfg):
     cable_contact_ke: float = 1.0e4
     cable_contact_kd: float = 1.0e-1
 
-    bin_size_x: float = 0.16
-    bin_size_y: float = 0.16
-    bin_height: float = 0.04
+    bin_size_x: float = 0.168
+    bin_size_y: float = 0.168
+    bin_height: float = 0.08
 
     # Scene Interactive configuration (Declarative multi-env scene)
     scene: FrankaMultiSceneCfg = FrankaMultiSceneCfg(num_envs=4096, env_spacing=4.0, replicate_physics=True)
