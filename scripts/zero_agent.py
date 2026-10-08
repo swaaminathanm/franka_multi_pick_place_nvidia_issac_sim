@@ -16,12 +16,16 @@ import isaaclab_tasks  # noqa: F401
 
 with contextlib.suppress(ImportError):
     import isaaclab_tasks_experimental  # noqa: F401
-from isaaclab_tasks.utils import (
-    add_launcher_args,
-    launch_simulation,
-    resolve_task_config,
-    setup_preset_cli,
-)
+try:
+    from isaaclab.app import add_launcher_args, launch_simulation
+except ImportError:
+    from isaaclab_tasks.utils import add_launcher_args, launch_simulation
+
+try:
+    from isaaclab_tasks.utils import resolve_task_config, setup_preset_cli
+except ImportError:
+    from isaaclab_tasks.utils.hydra import resolve_task_config
+    from isaaclab_tasks.utils.preset_cli import setup_preset_cli
 
 # Add argparse arguments
 parser = argparse.ArgumentParser(description="Zero action agent for Franka multi pick-and-place environment.")
