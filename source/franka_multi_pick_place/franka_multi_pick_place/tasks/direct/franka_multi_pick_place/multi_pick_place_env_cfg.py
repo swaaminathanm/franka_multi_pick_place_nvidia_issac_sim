@@ -32,6 +32,45 @@ class FrankaMultiNewtonContactCfg:
     solref_friction: tuple[float, float] | None = (0.008, 2.0)
 
 
+def _create_panda_robot_cfg() -> ArticulationCfg:
+    """Create and configure the Franka Panda robot articulation."""
+    robot = FRANKA_PANDA_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
+    robot.spawn.usd_path = f"{ISAACLAB_NUCLEUS_DIR}/Robots/FrankaEmika/Legacy/panda_instanceable.usd"
+    robot.spawn.rigid_props.disable_gravity = True
+    robot.spawn.rigid_props.max_depenetration_velocity = 5.0
+    robot.actuators = {
+        "panda_shoulder": ImplicitActuatorCfg(
+            joint_names_expr=["panda_joint[1-4]"],
+            stiffness=400.0,
+            damping=80.0,
+            armature=0.3,
+        ),
+        "panda_forearm": ImplicitActuatorCfg(
+            joint_names_expr=["panda_joint[5-7]"],
+            stiffness=400.0,
+            damping=80.0,
+            armature=0.11,
+        ),
+        "panda_hand": ImplicitActuatorCfg(
+            joint_names_expr=["panda_finger_joint.*"],
+            stiffness=7_500.0,
+            damping=220.0,
+            friction=0.2,
+            armature=0.15,
+        ),
+    }
+    for key, act_cfg in robot.actuators.items():
+        v_lim = 2.175 if key == "panda_shoulder" else (2.61 if key == "panda_forearm" else 0.04)
+        e_lim = 87.0 if key == "panda_shoulder" else (12.0 if key == "panda_forearm" else 100.0)
+        for v_attr in ("joint_velocity_limit", "velocity_limit_sim", "velocity_limit"):
+            if hasattr(act_cfg, v_attr):
+                setattr(act_cfg, v_attr, v_lim)
+        for e_attr in ("joint_effort_limit", "effort_limit_sim", "effort_limit"):
+            if hasattr(act_cfg, e_attr):
+                setattr(act_cfg, e_attr, e_lim)
+    return robot
+
+
 @configclass
 class FrankaMultiSceneCfg(InteractiveSceneCfg):
     """Declarative scene configuration for Franka multi-object pick-and-place.
@@ -66,40 +105,7 @@ class FrankaMultiSceneCfg(InteractiveSceneCfg):
     )
 
     # Robot Articulation (Franka Panda)
-    robot: ArticulationCfg = FRANKA_PANDA_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
-    robot.spawn.usd_path = f"{ISAACLAB_NUCLEUS_DIR}/Robots/FrankaEmika/Legacy/panda_instanceable.usd"
-    robot.spawn.rigid_props.disable_gravity = True
-    robot.spawn.rigid_props.max_depenetration_velocity = 5.0
-    robot.actuators = {
-        "panda_shoulder": ImplicitActuatorCfg(
-            joint_names_expr=["panda_joint[1-4]"],
-            stiffness=400.0,
-            damping=80.0,
-            armature=0.3,
-        ),
-        "panda_forearm": ImplicitActuatorCfg(
-            joint_names_expr=["panda_joint[5-7]"],
-            stiffness=400.0,
-            damping=80.0,
-            armature=0.11,
-        ),
-        "panda_hand": ImplicitActuatorCfg(
-            joint_names_expr=["panda_finger_joint.*"],
-            stiffness=7_500.0,
-            damping=220.0,
-            friction=0.2,
-            armature=0.15,
-        ),
-    }
-    for _key, _act_cfg in robot.actuators.items():
-        _v_lim = 2.175 if _key == "panda_shoulder" else (2.61 if _key == "panda_forearm" else 0.04)
-        _e_lim = 87.0 if _key == "panda_shoulder" else (12.0 if _key == "panda_forearm" else 100.0)
-        for _v_attr in ("joint_velocity_limit", "velocity_limit_sim", "velocity_limit"):
-            if hasattr(_act_cfg, _v_attr):
-                setattr(_act_cfg, _v_attr, _v_lim)
-        for _e_attr in ("joint_effort_limit", "effort_limit_sim", "effort_limit"):
-            if hasattr(_act_cfg, _e_attr):
-                setattr(_act_cfg, _e_attr, _e_lim)
+    robot: ArticulationCfg = _create_panda_robot_cfg()
 
     # 4cm Rigid Cube
     cube: RigidObjectCfg = RigidObjectCfg(
