@@ -341,7 +341,7 @@ class FrankaMultiPickPlaceEnv(DirectRLEnv):
         # Sample Bin positions in left quadrant
         bin_x = sample_uniform(self.cfg.bin_reset_pos_x_range[0], self.cfg.bin_reset_pos_x_range[1], (n,), self.device)
         bin_y = sample_uniform(self.cfg.bin_reset_pos_y_range[0], self.cfg.bin_reset_pos_y_range[1], (n,), self.device)
-        bin_z = torch.full((n,), 0.5 * self.cfg.bin_height, device=self.device)
+        bin_z = torch.full((n,), 0.0, device=self.device)
 
         # Sample Cable positions in center quadrant flush on table
         cable_x = sample_uniform(self.cfg.cable_reset_pos_x_range[0], self.cfg.cable_reset_pos_x_range[1], (n,), self.device)

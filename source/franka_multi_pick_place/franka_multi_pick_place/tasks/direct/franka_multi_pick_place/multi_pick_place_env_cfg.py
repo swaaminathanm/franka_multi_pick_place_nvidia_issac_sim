@@ -187,28 +187,23 @@ class FrankaMultiSceneCfg(InteractiveSceneCfg):
         ),
     )
 
-    # Target Bin / Collection Tray (Receptacle container)
+    # Target Bin / Collection Tray (Hollow plastic container with open center)
     bin: RigidObjectCfg = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/bin",
         init_state=RigidObjectCfg.InitialStateCfg(
-            pos=[0.35, 0.30, 0.02],
+            pos=[0.35, 0.30, 0.0],
             rot=[1.0, 0.0, 0.0, 0.0],
         ),
-        spawn=sim_utils.CuboidCfg(
-            size=(0.16, 0.16, 0.04),
+        spawn=sim_utils.UsdFileCfg(
+            usd_path=f"{ISAAC_NUCLEUS_DIR}/Props/Kuka_Table/container.usd",
+            scale=(0.7, 0.7, 0.7),
             rigid_props=sim_utils.RigidBodyPropertiesCfg(
                 kinematic_enabled=True,
                 disable_gravity=True,
             ),
-            collision_props=sim_utils.CollisionPropertiesCfg(),
-            physics_material=sim_utils.RigidBodyMaterialCfg(
-                friction_combine_mode="multiply",
-                restitution_combine_mode="multiply",
-                static_friction=1.0,
-                dynamic_friction=1.0,
-                restitution=0.0,
+            collision_props=sim_utils.CollisionPropertiesCfg(
+                mesh_approximation="convexDecomposition",
             ),
-            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.2, 0.5, 0.8)),
         ),
     )
 
