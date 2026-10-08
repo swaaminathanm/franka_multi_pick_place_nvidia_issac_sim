@@ -362,20 +362,24 @@ class FrankaMultiPickPlaceEnv(DirectRLEnv):
             cable_yaw,
         )
 
-        # Set Cube pose and velocity. Quaternion stays the spawn orientation from default_root_pose.
+        # Set Cube pose and velocity.
         cube_pose[:, 0] = cube_x
         cube_pose[:, 1] = cube_y
         cube_pose[:, 2] = cube_z
         cube_pose[:, :3] += self.scene.env_origins[env_ids_tensor]
-        self._write_free_root_pose(self.cube, cube_pose, env_ids_tensor)
+        cube_vel = torch.zeros_like(cube_pose[:, :6])
+        self.cube.write_root_pose_to_sim_index(root_pose=cube_pose, env_ids=env_ids_tensor)
+        self.cube.write_root_velocity_to_sim_index(root_velocity=cube_vel, env_ids=env_ids_tensor)
 
-        # Set Cable pose and velocity. quat_from_euler_xyz is (w, x, y, z); the sim pose is (x, y, z, w).
+        # Set Cable pose and velocity.
         cable_pose[:, 0] = cable_x
         cable_pose[:, 1] = cable_y
         cable_pose[:, 2] = cable_z
-        cable_pose[:, 3:7] = cable_quat[:, [1, 2, 3, 0]]
+        cable_pose[:, 3:7] = cable_quat
         cable_pose[:, :3] += self.scene.env_origins[env_ids_tensor]
-        self._write_free_root_pose(self.cable, cable_pose, env_ids_tensor)
+        cable_vel = torch.zeros_like(cable_pose[:, :6])
+        self.cable.write_root_pose_to_sim_index(root_pose=cable_pose, env_ids=env_ids_tensor)
+        self.cable.write_root_velocity_to_sim_index(root_velocity=cable_vel, env_ids=env_ids_tensor)
 
         bin_pose = self.bin_default_root_pose[env_ids_tensor].clone()
         bin_pose[:, 0] = bin_x
@@ -386,37 +390,6 @@ class FrankaMultiPickPlaceEnv(DirectRLEnv):
         bin_vel = torch.zeros_like(bin_pose[:, :6])
         self.bin.write_root_pose_to_sim_index(root_pose=bin_pose, env_ids=env_ids_tensor)
         self.bin.write_root_velocity_to_sim_index(root_velocity=bin_vel, env_ids=env_ids_tensor)
-
-        # Dynamic bodies otherwise keep the previous contact solution and snap back on the next step.
-        self._clear_newton_warmstart(env_ids_tensor)
-        self.scene.write_data_to_sim()
-        self.sim.forward()
-
-    def _write_free_root_pose(self, asset, root_pose: torch.Tensor, env_ids: torch.Tensor) -> None:
-        """Teleport a dynamic rigid body and zero the velocity the solver integrates."""
-        root_vel = torch.zeros((root_pose.shape[0], 6), device=self.device)
-        asset.write_root_pose_to_sim_index(root_pose=root_pose, env_ids=env_ids)
-        if hasattr(asset, "write_root_com_pose_to_sim_index"):
-            asset.write_root_com_pose_to_sim_index(root_pose=root_pose, env_ids=env_ids)
-        asset.write_root_velocity_to_sim_index(root_velocity=root_vel, env_ids=env_ids)
-        for write_name in ("write_root_com_velocity_to_sim_index", "write_root_link_velocity_to_sim_index"):
-            write_velocity = getattr(asset, write_name, None)
-            if write_velocity is not None:
-                write_velocity(root_velocity=root_vel, env_ids=env_ids)
-
-    def _clear_newton_warmstart(self, env_ids: torch.Tensor) -> None:
-        """Drop the cached acceleration so a teleported body is not pulled back to its old contacts."""
-        manager = self.sim.physics_manager
-        solver = getattr(manager, "solver", None)
-        if solver is None:
-            get_solver = getattr(manager, "get_solver", None)
-            solver = get_solver() if callable(get_solver) else None
-        data = getattr(solver, "mjw_data", None) if solver is not None else None
-        warm = getattr(data, "qacc_warmstart", None) if data is not None else None
-        if warm is None:
-            return
-        values = warm.torch if hasattr(warm, "torch") else warm
-        values[env_ids] = 0
 
     # --------------------------------------------------------------------------
     # Newton Physics & MuJoCo Contact Callbacks
