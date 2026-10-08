@@ -57,13 +57,9 @@ def spawn_hollow_bin(
     # Heavy USD/Isaac imports are inside the function body so that py_compile
     # succeeds locally (these modules only exist inside Isaac Sim on the VM).
     from pxr import Gf, UsdGeom, UsdPhysics  # noqa: PLC0415
+    import omni.usd  # always available in Isaac Sim 6.x  # noqa: PLC0415
 
-    try:
-        import isaacsim.core.utils.stage as _stage_utils  # Isaac Sim 6.x
-    except ImportError:
-        import omni.isaac.core.utils.stage as _stage_utils  # Isaac Sim 4.x fallback
-
-    stage = _stage_utils.get_current_stage()
+    stage = omni.usd.get_context().get_stage()
 
     # ------------------------------------------------------------------ #
     # 1.  Root Xform – receives the world transform, rigid-body, and mass #
