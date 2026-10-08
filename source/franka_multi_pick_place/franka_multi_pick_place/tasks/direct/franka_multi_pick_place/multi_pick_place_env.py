@@ -15,11 +15,14 @@ import isaaclab.sim as sim_utils
 from isaaclab.assets import Articulation, RigidObject
 from isaaclab.envs import DirectRLEnv
 from isaaclab.physics import PhysicsEvent
-from isaaclab.sim.spawners.from_files import GroundPlaneCfg, spawn_ground_plane
-from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
+from isaaclab.scene import InteractiveScene
 from isaaclab.utils.math import quat_apply, quat_from_euler_xyz, sample_uniform
 
 from .multi_pick_place_env_cfg import FrankaMultiPickPlaceEnvCfg
+
+# Backward-compatibility fallback stub if anything calls clone_environments
+if not hasattr(InteractiveScene, "clone_environments"):
+    InteractiveScene.clone_environments = lambda self, *args, **kwargs: None
 
 
 class FrankaMultiPickPlaceEnv(DirectRLEnv):
@@ -99,55 +102,14 @@ class FrankaMultiPickPlaceEnv(DirectRLEnv):
         )
 
     def _setup_scene(self):
-        """Construct the interactive scene: robot, table, cube, cable, bin, and ground plane."""
+        """Bind scene entities and register physics callbacks."""
         self._register_newton_contact_callback()
 
-        self.robot = Articulation(self.cfg.robot_cfg)
-        self.cube = RigidObject(self.cfg.cube)
-        self.cable = RigidObject(self.cfg.cable)
-        self.bin = RigidObject(self.cfg.bin)
-
-        # World ground plane
-        spawn_ground_plane(prim_path="/World/ground", cfg=GroundPlaneCfg(), translation=(0.0, 0.0, -1.05))
-
-        # Table mount
-        table_cfg = sim_utils.UsdFileCfg(
-            usd_path=f"{ISAAC_NUCLEUS_DIR}/Props/Mounts/SeattleLabTable/table_instanceable.usd"
-        )
-        table_cfg.func(
-            "/World/envs/env_.*/Table",
-            table_cfg,
-            translation=(0.5, 0.0, 0.0),
-            orientation=(0.0, 0.0, 0.70711, 0.70711),
-        )
-
-        # Clone environments across Isaac Lab versions
-        if hasattr(self.scene, "clone_environments"):
-            self.scene.clone_environments(copy_from_source=False)
-        else:
-            from isaaclab import cloner
-
-            src, dest = "/World/envs/env_0", "/World/envs/env_{}"
-            pos = cloner.grid_transforms(self.scene.num_envs, self.scene.cfg.env_spacing, device=self.device)[0]
-            global_paths = ("/World/ground",)
-            plan = cloner.clone_plan_from_env_0(
-                src, dest, self.scene.num_envs, self.device, pos, global_paths=global_paths
-            )
-            cloner.replicate(plan, stage=self.scene.stage)
-
-        if hasattr(self.scene, "filter_collisions"):
-            if "physx" in getattr(self.scene, "physics_backend", "") or self.device == "cpu":
-                self.scene.filter_collisions(global_prim_paths=["/World/ground"])
-
-        # Register entities to scene
-        self.scene.articulations["robot"] = self.robot
-        self.scene.rigid_objects["cube"] = self.cube
-        self.scene.rigid_objects["cable"] = self.cable
-        self.scene.rigid_objects["bin"] = self.bin
-
-        # Lighting
-        light_cfg = sim_utils.DomeLightCfg(intensity=2000.0, color=(0.75, 0.75, 0.75))
-        light_cfg.func("/World/Light", light_cfg)
+        # Retrieve scene assets (automatically instantiated and cloned across all environments by InteractiveScene)
+        self.robot = self.scene["robot"]
+        self.cube = self.scene["cube"]
+        self.cable = self.scene["cable"]
+        self.bin = self.scene["bin"]
 
     def close(self):
         """Cleanup environment and deregister Newton callbacks."""
