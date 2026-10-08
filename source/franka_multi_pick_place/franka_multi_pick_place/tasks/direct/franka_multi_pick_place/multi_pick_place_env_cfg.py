@@ -201,9 +201,7 @@ class FrankaMultiSceneCfg(InteractiveSceneCfg):
                 kinematic_enabled=True,
                 disable_gravity=True,
             ),
-            collision_props=sim_utils.CollisionPropertiesCfg(
-                mesh_approximation="convexDecomposition",
-            ),
+            collision_props=sim_utils.CollisionPropertiesCfg(),
         ),
     )
 
