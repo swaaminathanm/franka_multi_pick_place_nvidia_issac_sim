@@ -63,15 +63,15 @@ Develop a Newton-accelerated, vectorized reinforcement learning environment in I
   - [x] Implement `_get_rewards`:
     - [x] Baseline zero / placeholder reward for agent testing.
 
-- [ ] **Step 4: Zero Action Agent Implementation (`scripts/zero_agent.py`)**
-  - [ ] Create `scripts/zero_agent.py` using Isaac Lab launcher arguments.
-  - [ ] Configure CLI args: `--task`, `--num_envs`, `--max_steps`, `--viz` (kit, viser, none).
-  - [ ] Instantiate `gym.make("Franka-Multi-Pick-Place-Direct-v0")`.
-  - [ ] Execute zero actions ($\mathbf{0}$) on every step.
-  - [ ] Verification criteria:
-    - [ ] Robot maintains home posture steadily under internal gravity compensation.
-    - [ ] Randomized cube, cable, and bin settle onto the table surface without jitter or interpenetration.
-    - [ ] Periodic resets occur cleanly without memory leaks or physics drift.
+- [x] **Step 4: Zero Action Agent Implementation (`scripts/zero_agent.py`)**
+  - [x] Create `scripts/zero_agent.py` using Isaac Lab launcher arguments.
+  - [x] Configure CLI args: `--task`, `--num_envs`, `--max_steps`, `--viz` (kit, viser, none).
+  - [x] Instantiate `gym.make("Franka-Multi-Pick-Place-Direct-v0")`.
+  - [x] Execute zero actions ($\mathbf{0}$) on every step.
+  - [x] Verification criteria:
+    - [x] Robot maintains home posture steadily under internal gravity compensation.
+    - [x] Randomized cube, cable, and bin settle onto the table surface without jitter or interpenetration.
+    - [x] Periodic resets occur cleanly without memory leaks or physics drift.
 
 - [ ] **Step 5: Random Action Agent Implementation (`scripts/random_agent.py`)**
   - [ ] Create `scripts/random_agent.py`.
