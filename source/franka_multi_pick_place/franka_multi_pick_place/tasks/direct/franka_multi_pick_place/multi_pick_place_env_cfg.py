@@ -88,6 +88,7 @@ class FrankaMultiSceneCfg(InteractiveSceneCfg):
 
     # Workstation table (replicated per environment under {ENV_REGEX_NS})
     # Clean procedural workstation tabletop eliminating the overhead L-shaped camera mount rod.
+    # Placed in front of the Franka Panda base (x in [0.125, 0.975]) to prevent collision with robot base.
     # To change the table color, adjust diffuse_color below:
     #   Light Studio Gray: (0.75, 0.75, 0.78)
     #   Birch Wood:        (0.80, 0.72, 0.58)
@@ -96,7 +97,7 @@ class FrankaMultiSceneCfg(InteractiveSceneCfg):
     table: AssetBaseCfg = AssetBaseCfg(
         prim_path="{ENV_REGEX_NS}/Table",
         spawn=sim_utils.CuboidCfg(
-            size=(1.2, 1.0, 1.05),
+            size=(0.85, 1.0, 1.05),
             collision_props=sim_utils.CollisionPropertiesCfg(),
             physics_material=sim_utils.RigidBodyMaterialCfg(
                 friction_combine_mode="multiply",
@@ -108,7 +109,7 @@ class FrankaMultiSceneCfg(InteractiveSceneCfg):
             visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.75, 0.75, 0.78)),
         ),
         init_state=AssetBaseCfg.InitialStateCfg(
-            pos=(0.5, 0.0, -0.525),
+            pos=(0.55, 0.0, -0.525),
         ),
     )
 
@@ -153,23 +154,21 @@ class FrankaMultiSceneCfg(InteractiveSceneCfg):
         ),
     )
 
-    # Flexible Cable Payload (Capsule proxy for rigid kinematics/Newton solver)
-    # High-density, high-angular-damping rubber cable proxy that rests stably without rolling away
+    # Flexible Cable Payload (Flat industrial rubber cable proxy for rigid kinematics/Newton solver)
+    # Flat rectangular profile (20 cm x 3.5 cm x 1.5 cm) that sits completely flat on the table without rolling
     cable: RigidObjectCfg = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/cable",
         init_state=RigidObjectCfg.InitialStateCfg(
-            pos=[0.48, 0.0, 0.014],
+            pos=[0.48, 0.0, 0.0075],
             rot=[1.0, 0.0, 0.0, 0.0],
         ),
-        spawn=sim_utils.CapsuleCfg(
-            radius=0.014,
-            height=0.20,
-            axis="X",
+        spawn=sim_utils.CuboidCfg(
+            size=(0.20, 0.035, 0.015),
             rigid_props=sim_utils.RigidBodyPropertiesCfg(
                 solver_position_iteration_count=32,
                 solver_velocity_iteration_count=4,
                 linear_damping=1.0,
-                angular_damping=8.0,
+                angular_damping=5.0,
                 max_angular_velocity=100.0,
                 max_linear_velocity=10.0,
                 max_depenetration_velocity=0.5,
@@ -264,8 +263,10 @@ class FrankaMultiPickPlaceEnvCfg(DirectRLEnvCfg):
     cube_density: float = 400.0
 
     cable_length: float = 0.20
+    cable_width: float = 0.035
+    cable_thickness: float = 0.015
+    cable_radius: float = 0.015  # backward compatibility
     cable_segments: int = 19
-    cable_radius: float = 0.014
     cable_density: float = 1200.0
     cable_bend_stiffness: float = 5.0e-4
     cable_stretch_stiffness: float = 1.0e6

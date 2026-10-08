@@ -146,9 +146,10 @@ class FrankaMultiPickPlaceEnv(DirectRLEnv):
         self.robot.set_joint_position_target_index(target=self.robot_dof_targets)
 
     def _stabilize_robot_state(self) -> None:
-        """Clamp Newton drift before reading observations or applying targets."""
-        self._enforce_finger_joint_limits()
-        self._enforce_arm_joint_velocity_limits()
+        """No-op: PD actuators and joint limits govern state natively.
+        Mid-step simulation writes corrupt Newton CUDA state buffers, causing NaN and disappearing links.
+        """
+        pass
 
     def _resolve_arm_action_scale(self) -> torch.Tensor:
         """Return per-joint arm action scales as a length-7 tensor."""
@@ -345,7 +346,7 @@ class FrankaMultiPickPlaceEnv(DirectRLEnv):
         # Sample Cable positions in center quadrant flush on table
         cable_x = sample_uniform(self.cfg.cable_reset_pos_x_range[0], self.cfg.cable_reset_pos_x_range[1], (n,), self.device)
         cable_y = sample_uniform(self.cfg.cable_reset_pos_y_range[0], self.cfg.cable_reset_pos_y_range[1], (n,), self.device)
-        cable_z = torch.full((n,), self.cfg.cable_radius, device=self.device)
+        cable_z = torch.full((n,), 0.5 * getattr(self.cfg, "cable_thickness", 0.015), device=self.device)
 
         # Multi-object spatial separation checks to guarantee zero contact at reset
         dist_cube_cable = torch.hypot(cube_x - cable_x, cube_y - cable_y)
