@@ -336,8 +336,8 @@ class FrankaMultiPickPlaceEnv(DirectRLEnv):
         cube_y = sample_uniform(self.cfg.cube_reset_pos_y_range[0], self.cfg.cube_reset_pos_y_range[1], (n,), self.device)
         cube_z = torch.full((n,), 0.5 * self.cfg.cube_size, device=self.device)
 
-        # Sample Bin positions in left quadrant
-        bin_x = sample_uniform(self.cfg.bin_reset_pos_x_range[0], self.cfg.bin_reset_pos_x_range[1], (n,), self.device)
+        # Bin stays at the far edge of the table. Only Y moves, edge to edge.
+        bin_x = torch.full((n,), self.cfg.bin_reset_pos_x, device=self.device)
         bin_y = sample_uniform(self.cfg.bin_reset_pos_y_range[0], self.cfg.bin_reset_pos_y_range[1], (n,), self.device)
 
         # Sample Cable positions in center quadrant flush on table
@@ -387,7 +387,7 @@ class FrankaMultiPickPlaceEnv(DirectRLEnv):
         bin_pose[:, 0] = bin_x
         bin_pose[:, 1] = bin_y
         bin_pose[:, 2] = self.cfg.bin_root_z
-        bin_pose[:, 3:7] = torch.tensor((0.707, 0, 0, 0.707), device=self.device)
+        bin_pose[:, 3:7] = torch.tensor(self.cfg.bin_rot, device=self.device)
         bin_pose[:, :3] += self.scene.env_origins[env_ids_tensor]
         bin_vel = torch.zeros_like(bin_pose[:, :6])
         self.bin.write_root_pose_to_sim_index(root_pose=bin_pose, env_ids=env_ids_tensor)

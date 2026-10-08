@@ -71,6 +71,14 @@ def _create_panda_robot_cfg() -> ArticulationCfg:
     return robot
 
 
+# Half turn about Y. Spawn and reset both read this.
+BIN_ROT: tuple[float, float, float, float] = (0.0, 0.0, 1.0, 0.0)
+# Table top is x in [0.125, 0.975], y in [-0.5, 0.5]. Far-edge center keeps the
+# 0.33 m crate on the tabletop. Y is inset by half of bin_size_y.
+BIN_FAR_X: float = 0.81
+BIN_Y_RANGE: tuple[float, float] = (-0.38, 0.38)
+
+
 @configclass
 class FrankaMultiSceneCfg(InteractiveSceneCfg):
     """Declarative scene configuration for Franka multi-object pick-and-place.
@@ -187,13 +195,11 @@ class FrankaMultiSceneCfg(InteractiveSceneCfg):
         ),
     )
 
-    # Kinematic KLT crate. The file is authored with the opening facing down, and
-    # Viser keeps that orientation, so the negative Z scale turns the opening up.
-    # Scale 1.5 makes the opening longer than the 0.20 m cable. z = 0.1125 sits it
-    # on the table.
+    # Kinematic KLT crate. Scale 1.5 makes the opening longer than the 0.20 m cable.
+    # z = 0.1125 sits it on the table. Pose comes from BIN_ROT / BIN_FAR_X.
     bin: RigidObjectCfg = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/bin",
-        init_state=RigidObjectCfg.InitialStateCfg(pos=(0.42, 0.28, 0.1125), rot=(0.707, 0, 0, 0.707)),
+        init_state=RigidObjectCfg.InitialStateCfg(pos=(BIN_FAR_X, 0.0, 0.1125), rot=BIN_ROT),
         spawn=sim_utils.UsdFileCfg(
             usd_path=f"{ISAAC_NUCLEUS_DIR}/Props/KLT_Bin/small_KLT.usd",
             scale=(1.5, 1.5, 1.5),
@@ -272,6 +278,7 @@ class FrankaMultiPickPlaceEnvCfg(DirectRLEnvCfg):
     bin_size_y: float = 0.24
     bin_height: float = 0.22
     bin_root_z: float = 0.1125
+    bin_rot: tuple[float, float, float, float] = BIN_ROT
 
     # Scene Interactive configuration (Declarative multi-env scene)
     scene: FrankaMultiSceneCfg = FrankaMultiSceneCfg(num_envs=4096, env_spacing=4.0, replicate_physics=True)
@@ -290,9 +297,9 @@ class FrankaMultiPickPlaceEnvCfg(DirectRLEnvCfg):
     cable_reset_pos_y_range: tuple[float, float] = (-0.05, 0.05)
     cable_reset_yaw_range: tuple[float, float] = (-0.35, 0.35)
 
-    # Left quadrant: Target Bin
-    bin_reset_pos_x_range: tuple[float, float] = (0.35, 0.50)
-    bin_reset_pos_y_range: tuple[float, float] = (0.22, 0.32)
+    # Target bin: fixed at the far edge of the table, Y randomized edge to edge.
+    bin_reset_pos_x: float = BIN_FAR_X
+    bin_reset_pos_y_range: tuple[float, float] = BIN_Y_RANGE
 
     # Safety distance between spawned items to prevent overlap
     min_separation_distance: float = 0.15
