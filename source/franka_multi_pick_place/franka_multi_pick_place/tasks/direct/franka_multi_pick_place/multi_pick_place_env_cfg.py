@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import isaaclab.sim as sim_utils
+from isaaclab.actuators import ImplicitActuatorCfg
 from isaaclab.assets import ArticulationCfg, RigidObjectCfg
 from isaaclab.envs import DirectRLEnvCfg
 from isaaclab.scene import InteractiveSceneCfg
@@ -81,20 +82,37 @@ class FrankaMultiPickPlaceEnvCfg(DirectRLEnvCfg):
     robot_cfg.spawn.usd_path = f"{ISAACLAB_NUCLEUS_DIR}/Robots/FrankaEmika/Legacy/panda_instanceable.usd"
     robot_cfg.spawn.rigid_props.disable_gravity = True
     robot_cfg.spawn.rigid_props.max_depenetration_velocity = 5.0
-    robot_cfg.actuators["panda_shoulder"].velocity_limit_sim = 2.175
-    robot_cfg.actuators["panda_shoulder"].stiffness = 400.0
-    robot_cfg.actuators["panda_shoulder"].damping = 80.0
-    robot_cfg.actuators["panda_shoulder"].armature = 0.3
-    robot_cfg.actuators["panda_forearm"].velocity_limit_sim = 2.61
-    robot_cfg.actuators["panda_forearm"].stiffness = 400.0
-    robot_cfg.actuators["panda_forearm"].damping = 80.0
-    robot_cfg.actuators["panda_forearm"].armature = 0.11
-    robot_cfg.actuators["panda_hand"].effort_limit_sim = 100.0
-    robot_cfg.actuators["panda_hand"].velocity_limit_sim = 0.04
-    robot_cfg.actuators["panda_hand"].stiffness = 7_500.0
-    robot_cfg.actuators["panda_hand"].damping = 220.0
-    robot_cfg.actuators["panda_hand"].friction = 0.2
-    robot_cfg.actuators["panda_hand"].armature = 0.15
+    robot_cfg.actuators = {
+        "panda_shoulder": ImplicitActuatorCfg(
+            joint_names_expr=["panda_joint[1-4]"],
+            stiffness=400.0,
+            damping=80.0,
+            armature=0.3,
+        ),
+        "panda_forearm": ImplicitActuatorCfg(
+            joint_names_expr=["panda_joint[5-7]"],
+            stiffness=400.0,
+            damping=80.0,
+            armature=0.11,
+        ),
+        "panda_hand": ImplicitActuatorCfg(
+            joint_names_expr=["panda_finger_joint.*"],
+            stiffness=7_500.0,
+            damping=220.0,
+            friction=0.2,
+            armature=0.15,
+        ),
+    }
+    # Safely apply velocity and effort limits across Isaac Lab version schemas
+    for _key, _act_cfg in robot_cfg.actuators.items():
+        _v_lim = 2.175 if _key == "panda_shoulder" else (2.61 if _key == "panda_forearm" else 0.04)
+        _e_lim = 87.0 if _key == "panda_shoulder" else (12.0 if _key == "panda_forearm" else 100.0)
+        for _v_attr in ("joint_velocity_limit", "velocity_limit_sim", "velocity_limit"):
+            if hasattr(_act_cfg, _v_attr):
+                setattr(_act_cfg, _v_attr, _v_lim)
+        for _e_attr in ("joint_effort_limit", "effort_limit_sim", "effort_limit"):
+            if hasattr(_act_cfg, _e_attr):
+                setattr(_act_cfg, _e_attr, _e_lim)
 
     # 4cm Rigid Cube
     cube_size: float = 0.04

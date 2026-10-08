@@ -73,10 +73,10 @@ Develop a Newton-accelerated, vectorized reinforcement learning environment in I
     - [x] Randomized cube, cable, and bin settle onto the table surface without jitter or interpenetration.
     - [x] Periodic resets occur cleanly without memory leaks or physics drift.
 
-- [ ] **Step 5: Random Action Agent Implementation (`scripts/random_agent.py`)**
-  - [ ] Create `scripts/random_agent.py`.
-  - [ ] Sample actions uniformly from $\mathcal{U}[-1, 1]^8$ on each policy step.
-  - [ ] Verification criteria:
+- [x] **Step 5: Random Action Agent Implementation (`scripts/random_agent.py`)**
+  - [x] Create `scripts/random_agent.py`.
+  - [x] Sample actions uniformly from $\mathcal{U}[-1, 1]^8$ on each policy step.
+  - [ ] Verification criteria (on Vast.ai VM):
     - [ ] Arm joint limits safely enforced by clamping logic.
     - [ ] Gripper fingers smoothly transition between limits without joint dislocation.
     - [ ] Newton solver maintains numerical stability under erratic inputs (no NaN or physics blowup).
