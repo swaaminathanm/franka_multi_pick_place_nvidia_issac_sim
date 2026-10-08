@@ -51,6 +51,7 @@ class FrankaMultiPickPlaceEnv(DirectRLEnv):
         self.cable_default_root_vel = self.cable.data.default_root_vel.torch.clone()
         self.bin_default_root_pose = self.bin.data.default_root_pose.torch.clone()
         self.bin_default_root_vel = self.bin.data.default_root_vel.torch.clone()
+        self.bin_wall_default_root_pose = [wall.data.default_root_pose.torch.clone() for wall in self.bin_walls]
 
         # Buffers for actions and targets
         self.robot_dof_targets = self.robot_default_joint_pos.clone()
@@ -110,6 +111,12 @@ class FrankaMultiPickPlaceEnv(DirectRLEnv):
         self.cube = self.scene["cube"]
         self.cable = self.scene["cable"]
         self.bin = self.scene["bin"]
+        self.bin_walls = [
+            self.scene["bin_wall_left"],
+            self.scene["bin_wall_right"],
+            self.scene["bin_wall_front"],
+            self.scene["bin_wall_back"],
+        ]
 
     def close(self):
         """Cleanup environment and deregister Newton callbacks."""
@@ -341,7 +348,6 @@ class FrankaMultiPickPlaceEnv(DirectRLEnv):
         # Sample Bin positions in left quadrant
         bin_x = sample_uniform(self.cfg.bin_reset_pos_x_range[0], self.cfg.bin_reset_pos_x_range[1], (n,), self.device)
         bin_y = sample_uniform(self.cfg.bin_reset_pos_y_range[0], self.cfg.bin_reset_pos_y_range[1], (n,), self.device)
-        bin_z = torch.full((n,), 0.0, device=self.device)
 
         # Sample Cable positions in center quadrant flush on table
         cable_x = sample_uniform(self.cfg.cable_reset_pos_x_range[0], self.cfg.cable_reset_pos_x_range[1], (n,), self.device)
@@ -386,14 +392,24 @@ class FrankaMultiPickPlaceEnv(DirectRLEnv):
         self.cable.write_root_pose_to_sim_index(root_pose=cable_pose, env_ids=env_ids_tensor)
         self.cable.write_root_velocity_to_sim_index(root_velocity=cable_vel, env_ids=env_ids_tensor)
 
-        # Set Bin pose and velocity
+        # Move the floor and the four walls by the same table point.
+        env_origins = self.scene.env_origins[env_ids_tensor]
         bin_pose[:, 0] = bin_x
         bin_pose[:, 1] = bin_y
-        bin_pose[:, 2] = bin_z
-        bin_pose[:, :3] += self.scene.env_origins[env_ids_tensor]
+        bin_pose[:, 2] = self.cfg.bin_floor_center_z
+        bin_pose[:, :3] += env_origins
         bin_vel = torch.zeros_like(bin_pose[:, :6])
         self.bin.write_root_pose_to_sim_index(root_pose=bin_pose, env_ids=env_ids_tensor)
         self.bin.write_root_velocity_to_sim_index(root_velocity=bin_vel, env_ids=env_ids_tensor)
+        for wall, default_pose, offset in zip(self.bin_walls, self.bin_wall_default_root_pose, self.cfg.bin_wall_local_pos):
+            wall_pose = default_pose[env_ids_tensor].clone()
+            wall_pose[:, 0] = bin_x + offset[0]
+            wall_pose[:, 1] = bin_y + offset[1]
+            wall_pose[:, 2] = offset[2]
+            wall_pose[:, :3] += env_origins
+            wall_vel = torch.zeros_like(wall_pose[:, :6])
+            wall.write_root_pose_to_sim_index(root_pose=wall_pose, env_ids=env_ids_tensor)
+            wall.write_root_velocity_to_sim_index(root_velocity=wall_vel, env_ids=env_ids_tensor)
 
     # --------------------------------------------------------------------------
     # Newton Physics & MuJoCo Contact Callbacks
