@@ -390,14 +390,38 @@ class FrankaMultiPickPlaceEnv(DirectRLEnv):
         bin_vel = torch.zeros_like(bin_pose[:, :6])
         self.bin.write_root_pose_to_sim_index(root_pose=bin_pose, env_ids=env_ids_tensor)
         self.bin.write_root_velocity_to_sim_index(root_velocity=bin_vel, env_ids=env_ids_tensor)
+        # Pose writes leave MuJoCo's last contact solution in place, so the next step
+        # draws the cube and cable back to where they were. The bin is kinematic and stays.
+        self._clear_newton_warmstart(env_ids_tensor)
+        self.sim.forward()
 
+        origin = self.scene.env_origins[env_ids_tensor]
+        cube_now = self.cube.data.root_pos_w.torch[env_ids_tensor] - origin
+        cable_now = self.cable.data.root_pos_w.torch[env_ids_tensor] - origin
+        bin_now = self.bin.data.root_pos_w.torch[env_ids_tensor] - origin
         for i in range(n):
             print(
                 f"[reset] env {int(env_ids_tensor[i])} "
-                f"cube xyz=({cube_x[i]:.3f}, {cube_y[i]:.3f}, {cube_z[i]:.3f}) "
-                f"cable xyz=({cable_x[i]:.3f}, {cable_y[i]:.3f}, {cable_z[i]:.3f}) "
-                f"bin xyz=({bin_x[i]:.3f}, {bin_y[i]:.3f}, {self.cfg.bin_root_z:.3f})"
+                f"cube xyz=({cube_now[i, 0]:.3f}, {cube_now[i, 1]:.3f}, {cube_now[i, 2]:.3f}) "
+                f"cable xyz=({cable_now[i, 0]:.3f}, {cable_now[i, 1]:.3f}, {cable_now[i, 2]:.3f}) "
+                f"bin xyz=({bin_now[i, 0]:.3f}, {bin_now[i, 1]:.3f}, {bin_now[i, 2]:.3f})"
             )
+
+    def _clear_newton_warmstart(self, env_ids: torch.Tensor) -> None:
+        """Zero MuJoCo's cached acceleration and refresh body poses after a teleport."""
+        manager = self.sim.physics_manager
+        solver = getattr(manager, "_solver", None)
+        data = getattr(solver, "mjw_data", None) if solver is not None else None
+        if data is not None:
+            for name in ("qacc_warmstart", "qfrc_applied", "xfrc_applied"):
+                buffer = getattr(data, name, None)
+                if buffer is None:
+                    continue
+                values = buffer.torch if hasattr(buffer, "torch") else wp.to_torch(buffer)
+                values[env_ids] = 0
+        invalidate_fk = getattr(manager, "invalidate_fk", None)
+        if callable(invalidate_fk):
+            invalidate_fk()
 
     # --------------------------------------------------------------------------
     # Newton Physics & MuJoCo Contact Callbacks
