@@ -5,8 +5,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import isaaclab.sim as sim_utils
 from isaaclab.actuators import ImplicitActuatorCfg
 from isaaclab.assets import ArticulationCfg, AssetBaseCfg, RigidObjectCfg
@@ -18,8 +16,7 @@ from isaaclab.utils.configclass import configclass
 from isaaclab_assets.robots.franka import FRANKA_PANDA_CFG
 from isaaclab_newton.physics import MJWarpSolverCfg, NewtonCfg
 
-# Authored hollow bin: assets/bin.usda (floor + four walls).
-_BIN_USD_PATH = str(Path(__file__).resolve().parent / "assets" / "bin.usda")
+from .hollow_bin_spawner import HollowBinCfg
 
 
 @configclass
@@ -192,22 +189,20 @@ class FrankaMultiSceneCfg(InteractiveSceneCfg):
         ),
     )
 
-    # Target bin authored in assets/bin.usda.
-    # Inner cavity used by the success check: 0.16 x 0.16 x 0.08 m.
+    # Five CuboidCfg boxes. Viser collapses the USDA mesh into the pyramid in the screenshot.
     bin: RigidObjectCfg = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/bin",
         init_state=RigidObjectCfg.InitialStateCfg(
             pos=[0.35, 0.30, 0.0],
             rot=[1.0, 0.0, 0.0, 0.0],
         ),
-        spawn=sim_utils.UsdFileCfg(
-            usd_path=_BIN_USD_PATH,
-            rigid_props=sim_utils.RigidBodyPropertiesCfg(
-                kinematic_enabled=True,
-                disable_gravity=True,
-            ),
-            collision_props=sim_utils.CollisionPropertiesCfg(collision_enabled=True),
-            mass_props=sim_utils.MassPropertiesCfg(mass=0.5),
+        spawn=HollowBinCfg(
+            outer_size_x=0.20,
+            outer_size_y=0.20,
+            wall_height=0.08,
+            wall_thickness=0.02,
+            floor_thickness=0.01,
+            mass=0.50,
         ),
     )
 
