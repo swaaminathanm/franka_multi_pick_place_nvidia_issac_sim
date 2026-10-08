@@ -37,4 +37,6 @@ logs/
 *.log
 *.usd
 *.usda
+!source/**/assets/*.usd
+!source/**/assets/*.usda
 *.viser

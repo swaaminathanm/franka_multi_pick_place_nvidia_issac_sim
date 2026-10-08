@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+import os
+
 import isaaclab.sim as sim_utils
 from isaaclab.actuators import ImplicitActuatorCfg
 from isaaclab.assets import ArticulationCfg, AssetBaseCfg, RigidObjectCfg
@@ -15,6 +17,9 @@ from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR, ISAACLAB_NUCLEUS_DIR
 from isaaclab.utils.configclass import configclass
 from isaaclab_assets.robots.franka import FRANKA_PANDA_CFG
 from isaaclab_newton.physics import MJWarpSolverCfg, NewtonCfg
+
+_ASSETS_DIR = os.path.join(os.path.dirname(__file__), "assets")
+_HOLLOW_BIN_USD_PATH = os.path.join(_ASSETS_DIR, "hollow_bin.usda")
 
 
 @configclass
@@ -195,8 +200,8 @@ class FrankaMultiSceneCfg(InteractiveSceneCfg):
             rot=[1.0, 0.0, 0.0, 0.0],
         ),
         spawn=sim_utils.UsdFileCfg(
-            usd_path=f"{ISAAC_NUCLEUS_DIR}/Props/Kuka_Table/container.usd",
-            scale=(0.7, 0.7, 0.7),
+            usd_path=_HOLLOW_BIN_USD_PATH,
+            scale=(1.0, 1.0, 1.0),
             rigid_props=sim_utils.RigidBodyPropertiesCfg(
                 kinematic_enabled=True,
                 disable_gravity=True,

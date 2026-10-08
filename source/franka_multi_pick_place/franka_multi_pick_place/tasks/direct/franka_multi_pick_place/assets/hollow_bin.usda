@@ -1,0 +1,87 @@
+#usda 1.0
+(
+    defaultPrim = "hollow_bin"
+    metersPerUnit = 1.0
+    upAxis = "Z"
+)
+
+def Xform "hollow_bin" (
+    kind = "component"
+    prepend apiSchemas = ["PhysicsRigidBodyAPI"]
+)
+{
+    def Scope "Looks"
+    {
+        def Material "BlueMaterial"
+        {
+            def Shader "Shader"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor = (0.2, 0.5, 0.8)
+                float inputs:roughness = 0.3
+                token outputs:surface
+            }
+            token outputs:surface.connect = </hollow_bin/Looks/BlueMaterial/Shader.outputs:surface>
+        }
+    }
+
+    def Cube "bottom" (
+        prepend apiSchemas = ["PhysicsCollisionAPI"]
+    )
+    {
+        bool physics:collisionEnabled = true
+        double size = 1.0
+        double3 xformOp:scale = (0.18, 0.18, 0.008)
+        double3 xformOp:translate = (0.0, 0.0, 0.004)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+        rel material:binding = </hollow_bin/Looks/BlueMaterial>
+    }
+
+    def Cube "wall_left" (
+        prepend apiSchemas = ["PhysicsCollisionAPI"]
+    )
+    {
+        bool physics:collisionEnabled = true
+        double size = 1.0
+        double3 xformOp:scale = (0.18, 0.01, 0.05)
+        double3 xformOp:translate = (0.0, -0.085, 0.025)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+        rel material:binding = </hollow_bin/Looks/BlueMaterial>
+    }
+
+    def Cube "wall_right" (
+        prepend apiSchemas = ["PhysicsCollisionAPI"]
+    )
+    {
+        bool physics:collisionEnabled = true
+        double size = 1.0
+        double3 xformOp:scale = (0.18, 0.01, 0.05)
+        double3 xformOp:translate = (0.0, 0.085, 0.025)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+        rel material:binding = </hollow_bin/Looks/BlueMaterial>
+    }
+
+    def Cube "wall_front" (
+        prepend apiSchemas = ["PhysicsCollisionAPI"]
+    )
+    {
+        bool physics:collisionEnabled = true
+        double size = 1.0
+        double3 xformOp:scale = (0.01, 0.16, 0.05)
+        double3 xformOp:translate = (0.085, 0.0, 0.025)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+        rel material:binding = </hollow_bin/Looks/BlueMaterial>
+    }
+
+    def Cube "wall_back" (
+        prepend apiSchemas = ["PhysicsCollisionAPI"]
+    )
+    {
+        bool physics:collisionEnabled = true
+        double size = 1.0
+        double3 xformOp:scale = (0.01, 0.16, 0.05)
+        double3 xformOp:translate = (-0.085, 0.0, 0.025)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+        rel material:binding = </hollow_bin/Looks/BlueMaterial>
+    }
+}
