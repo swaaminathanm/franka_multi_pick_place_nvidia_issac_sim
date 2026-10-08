@@ -294,6 +294,26 @@ class FrankaMultiPickPlaceEnv(DirectRLEnv):
         cable_dropped = cable_pos_z < self.cfg.object_drop_height
         terminated = cube_dropped | cable_dropped
 
+        # TODO (Step 7 - Task Success Termination):
+        # Check if both cube and cable are successfully placed inside the bin:
+        #   cube_pos = self.cube.data.root_pos_w.torch - self.scene.env_origins
+        #   cable_pos = self.cable.data.root_pos_w.torch - self.scene.env_origins
+        #   bin_pos = self.bin.data.root_pos_w.torch - self.scene.env_origins
+        #   cube_in_bin = (
+        #       (torch.abs(cube_pos[:, 0] - bin_pos[:, 0]) < 0.5 * self.cfg.bin_size_x)
+        #       & (torch.abs(cube_pos[:, 1] - bin_pos[:, 1]) < 0.5 * self.cfg.bin_size_y)
+        #       & (cube_pos[:, 2] > bin_pos[:, 2])
+        #       & (cube_pos[:, 2] < bin_pos[:, 2] + self.cfg.bin_height)
+        #   )
+        #   cable_in_bin = (
+        #       (torch.abs(cable_pos[:, 0] - bin_pos[:, 0]) < 0.5 * self.cfg.bin_size_x)
+        #       & (torch.abs(cable_pos[:, 1] - bin_pos[:, 1]) < 0.5 * self.cfg.bin_size_y)
+        #       & (cable_pos[:, 2] > bin_pos[:, 2])
+        #       & (cable_pos[:, 2] < bin_pos[:, 2] + self.cfg.bin_height)
+        #   )
+        #   task_success = cube_in_bin & cable_in_bin
+        #   terminated = terminated | task_success
+
         truncated = self.episode_length_buf >= self.max_episode_length - 1
         return terminated, truncated
 
