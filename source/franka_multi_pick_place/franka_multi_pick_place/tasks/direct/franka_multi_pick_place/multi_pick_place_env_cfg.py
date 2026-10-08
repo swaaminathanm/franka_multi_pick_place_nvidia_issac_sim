@@ -26,7 +26,7 @@ class FrankaMultiNewtonContactCfg:
     kd: float | None = 1_000.0
     kf: float | None = 3_000.0
     mu: float | None = 1.0
-    contact_margin: float | None = 0.002
+    contact_margin: float | None = 0.001
     geom_solimp: tuple[float, float, float, float, float] | None = (0.97, 0.995, 0.0015, 0.5, 2.0)
     solimp_friction: tuple[float, float, float, float, float] | None = (0.97, 0.995, 0.0015, 0.5, 2.0)
     solref_friction: tuple[float, float] | None = (0.008, 2.0)
@@ -126,18 +126,18 @@ class FrankaMultiSceneCfg(InteractiveSceneCfg):
         prim_path="{ENV_REGEX_NS}/cube",
         init_state=RigidObjectCfg.InitialStateCfg(
             pos=[0.45, -0.25, 0.02],
-            rot=[0.0, 0.0, 0.0, 1.0],
+            rot=[1.0, 0.0, 0.0, 0.0],
         ),
         spawn=sim_utils.CuboidCfg(
             size=(0.04, 0.04, 0.04),
             rigid_props=sim_utils.RigidBodyPropertiesCfg(
                 solver_position_iteration_count=32,
-                solver_velocity_iteration_count=2,
-                linear_damping=0.1,
-                angular_damping=0.2,
-                max_angular_velocity=1000.0,
-                max_linear_velocity=1000.0,
-                max_depenetration_velocity=5.0,
+                solver_velocity_iteration_count=4,
+                linear_damping=0.5,
+                angular_damping=1.0,
+                max_angular_velocity=100.0,
+                max_linear_velocity=10.0,
+                max_depenetration_velocity=0.5,
                 disable_gravity=False,
             ),
             collision_props=sim_utils.CollisionPropertiesCfg(),
@@ -154,33 +154,33 @@ class FrankaMultiSceneCfg(InteractiveSceneCfg):
     )
 
     # Flexible Cable Payload (Capsule proxy for rigid kinematics/Newton solver)
-    # 3 cm diameter (0.015 m radius) vibrant safety orange cable for high visibility and reliable grasping
+    # High-density, high-angular-damping rubber cable proxy that rests stably without rolling away
     cable: RigidObjectCfg = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/cable",
         init_state=RigidObjectCfg.InitialStateCfg(
-            pos=[0.48, 0.0, 0.017],
-            rot=[0.0, 0.0, 0.0, 1.0],
+            pos=[0.48, 0.0, 0.014],
+            rot=[1.0, 0.0, 0.0, 0.0],
         ),
         spawn=sim_utils.CapsuleCfg(
-            radius=0.015,
-            height=0.30,
+            radius=0.014,
+            height=0.20,
             axis="X",
             rigid_props=sim_utils.RigidBodyPropertiesCfg(
                 solver_position_iteration_count=32,
-                solver_velocity_iteration_count=2,
-                linear_damping=0.1,
-                angular_damping=0.2,
-                max_angular_velocity=1000.0,
-                max_linear_velocity=1000.0,
-                max_depenetration_velocity=5.0,
+                solver_velocity_iteration_count=4,
+                linear_damping=1.0,
+                angular_damping=8.0,
+                max_angular_velocity=100.0,
+                max_linear_velocity=10.0,
+                max_depenetration_velocity=0.5,
                 disable_gravity=False,
             ),
             collision_props=sim_utils.CollisionPropertiesCfg(),
-            mass_props=sim_utils.MassPropertiesCfg(density=100.0),
+            mass_props=sim_utils.MassPropertiesCfg(density=1200.0),
             physics_material=sim_utils.RigidBodyMaterialCfg(
                 friction_combine_mode="multiply",
                 restitution_combine_mode="multiply",
-                static_friction=1.2,
+                static_friction=1.5,
                 dynamic_friction=1.2,
                 restitution=0.0,
             ),
@@ -193,7 +193,7 @@ class FrankaMultiSceneCfg(InteractiveSceneCfg):
         prim_path="{ENV_REGEX_NS}/bin",
         init_state=RigidObjectCfg.InitialStateCfg(
             pos=[0.35, 0.30, 0.02],
-            rot=[0.0, 0.0, 0.0, 1.0],
+            rot=[1.0, 0.0, 0.0, 0.0],
         ),
         spawn=sim_utils.CuboidCfg(
             size=(0.16, 0.16, 0.04),
@@ -263,10 +263,10 @@ class FrankaMultiPickPlaceEnvCfg(DirectRLEnvCfg):
     cube_size: float = 0.04
     cube_density: float = 400.0
 
-    cable_length: float = 0.30
+    cable_length: float = 0.20
     cable_segments: int = 19
-    cable_radius: float = 0.015
-    cable_density: float = 100.0
+    cable_radius: float = 0.014
+    cable_density: float = 1200.0
     cable_bend_stiffness: float = 5.0e-4
     cable_stretch_stiffness: float = 1.0e6
     cable_contact_ke: float = 1.0e4
@@ -283,19 +283,22 @@ class FrankaMultiPickPlaceEnvCfg(DirectRLEnvCfg):
     action_scale: tuple[float, ...] = (0.45, 1.60, 0.70, 2.70, 0.45, 0.80, 0.30)
     newton_contact: FrankaMultiNewtonContactCfg = FrankaMultiNewtonContactCfg()
 
-    # Reset Spatial Randomization Bounds
-    cube_reset_pos_x_range: tuple[float, float] = (0.35, 0.55)
-    cube_reset_pos_y_range: tuple[float, float] = (-0.35, -0.12)
+    # Reset Spatial Randomization Bounds (Distinct, guaranteed non-overlapping workspace zones)
+    # Right quadrant: Cube
+    cube_reset_pos_x_range: tuple[float, float] = (0.38, 0.55)
+    cube_reset_pos_y_range: tuple[float, float] = (-0.32, -0.18)
 
-    cable_reset_pos_x_range: tuple[float, float] = (0.38, 0.58)
-    cable_reset_pos_y_range: tuple[float, float] = (-0.08, 0.12)
-    cable_reset_yaw_range: tuple[float, float] = (-1.5708, 1.5708)
+    # Center quadrant: Cable
+    cable_reset_pos_x_range: tuple[float, float] = (0.40, 0.55)
+    cable_reset_pos_y_range: tuple[float, float] = (-0.05, 0.05)
+    cable_reset_yaw_range: tuple[float, float] = (-0.35, 0.35)
 
-    bin_reset_pos_x_range: tuple[float, float] = (0.30, 0.50)
-    bin_reset_pos_y_range: tuple[float, float] = (0.22, 0.40)
+    # Left quadrant: Target Bin
+    bin_reset_pos_x_range: tuple[float, float] = (0.35, 0.50)
+    bin_reset_pos_y_range: tuple[float, float] = (0.24, 0.36)
 
     # Safety distance between spawned items to prevent overlap
-    min_separation_distance: float = 0.12
+    min_separation_distance: float = 0.15
     reset_arm_noise: float = 0.05
 
     # Termination bounds

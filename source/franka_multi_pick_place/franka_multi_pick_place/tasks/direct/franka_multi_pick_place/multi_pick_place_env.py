@@ -347,15 +347,19 @@ class FrankaMultiPickPlaceEnv(DirectRLEnv):
         bin_y = sample_uniform(self.cfg.bin_reset_pos_y_range[0], self.cfg.bin_reset_pos_y_range[1], (n,), self.device)
         bin_z = torch.full((n,), 0.5 * self.cfg.bin_height, device=self.device)
 
-        # Sample Cable positions in center quadrant
+        # Sample Cable positions in center quadrant flush on table
         cable_x = sample_uniform(self.cfg.cable_reset_pos_x_range[0], self.cfg.cable_reset_pos_x_range[1], (n,), self.device)
         cable_y = sample_uniform(self.cfg.cable_reset_pos_y_range[0], self.cfg.cable_reset_pos_y_range[1], (n,), self.device)
-        cable_z = torch.full((n,), self.cfg.cable_radius + 0.002, device=self.device)
+        cable_z = torch.full((n,), self.cfg.cable_radius, device=self.device)
 
-        # Ensure spatial separation via rejection adjustment if distance < min_separation_distance
+        # Multi-object spatial separation checks to guarantee zero contact at reset
         dist_cube_cable = torch.hypot(cube_x - cable_x, cube_y - cable_y)
-        too_close = dist_cube_cable < self.cfg.min_separation_distance
-        cable_x = torch.where(too_close, cable_x + self.cfg.min_separation_distance, cable_x)
+        too_close_cube_cable = dist_cube_cable < self.cfg.min_separation_distance
+        cable_x = torch.where(too_close_cube_cable, cable_x + 0.08, cable_x)
+
+        dist_cable_bin = torch.hypot(bin_x - cable_x, bin_y - cable_y)
+        too_close_cable_bin = dist_cable_bin < self.cfg.min_separation_distance
+        cable_x = torch.where(too_close_cable_bin, cable_x + 0.08, cable_x)
 
         # Randomize Cable yaw orientation
         cable_yaw = sample_uniform(
