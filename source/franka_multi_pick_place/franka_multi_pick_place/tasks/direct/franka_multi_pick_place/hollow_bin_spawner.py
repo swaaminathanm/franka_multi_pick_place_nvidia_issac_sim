@@ -31,9 +31,9 @@ def spawn_hollow_bin(
     The ``@clone`` decorator expands ``{ENV_REGEX_NS}/bin`` once per environment.
     """
     from pxr import Gf, UsdGeom, UsdPhysics  # noqa: PLC0415
-    import omni.usd  # noqa: PLC0415
 
-    stage = omni.usd.get_context().get_stage()
+    # Kit-less Newton has no omni.usd. The open stage is the one Isaac Lab already set.
+    stage = sim_utils.get_current_stage()
     xform = UsdGeom.Xform.Define(stage, prim_path)
     prim = xform.GetPrim()
 
