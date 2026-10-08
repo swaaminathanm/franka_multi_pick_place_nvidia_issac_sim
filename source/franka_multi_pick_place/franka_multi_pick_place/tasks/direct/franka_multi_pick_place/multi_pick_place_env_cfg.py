@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import isaaclab.sim as sim_utils
 from isaaclab.actuators import ImplicitActuatorCfg
 from isaaclab.assets import ArticulationCfg, AssetBaseCfg, RigidObjectCfg
@@ -16,7 +18,8 @@ from isaaclab.utils.configclass import configclass
 from isaaclab_assets.robots.franka import FRANKA_PANDA_CFG
 from isaaclab_newton.physics import MJWarpSolverCfg, NewtonCfg
 
-from .hollow_bin_spawner import HollowBinCfg
+# Authored hollow bin: assets/bin.usda (floor + four walls).
+_BIN_USD_PATH = str(Path(__file__).resolve().parent / "assets" / "bin.usda")
 
 
 @configclass
@@ -189,25 +192,22 @@ class FrankaMultiSceneCfg(InteractiveSceneCfg):
         ),
     )
 
-    # Target Bin / Collection Tray — built from 5 native Isaac Lab CuboidCfg
-    # primitives via HollowBinCfg (see hollow_bin_spawner.py).
-    # No external USDA file required; each box piece has its own visual_material
-    # so Viser renders all walls correctly in 3D.
+    # Target bin authored in assets/bin.usda.
+    # Inner cavity used by the success check: 0.16 x 0.16 x 0.08 m.
     bin: RigidObjectCfg = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/bin",
         init_state=RigidObjectCfg.InitialStateCfg(
             pos=[0.35, 0.30, 0.0],
             rot=[1.0, 0.0, 0.0, 0.0],
         ),
-        spawn=HollowBinCfg(
-            outer_size_x=0.20,
-            outer_size_y=0.20,
-            wall_height=0.08,
-            wall_thickness=0.016,
-            floor_thickness=0.008,
-            mass=0.50,
-            wall_color=(0.08, 0.30, 0.65),
-            floor_color=(0.28, 0.62, 0.90),
+        spawn=sim_utils.UsdFileCfg(
+            usd_path=_BIN_USD_PATH,
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(
+                kinematic_enabled=True,
+                disable_gravity=True,
+            ),
+            collision_props=sim_utils.CollisionPropertiesCfg(collision_enabled=True),
+            mass_props=sim_utils.MassPropertiesCfg(mass=0.5),
         ),
     )
 
@@ -272,8 +272,8 @@ class FrankaMultiPickPlaceEnvCfg(DirectRLEnvCfg):
     cable_contact_ke: float = 1.0e4
     cable_contact_kd: float = 1.0e-1
 
-    bin_size_x: float = 0.168
-    bin_size_y: float = 0.168
+    bin_size_x: float = 0.16
+    bin_size_y: float = 0.16
     bin_height: float = 0.08
 
     # Scene Interactive configuration (Declarative multi-env scene)
