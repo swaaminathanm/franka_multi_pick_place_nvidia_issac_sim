@@ -235,7 +235,7 @@ class FrankaMultiPickPlaceEnvCfg(DirectRLEnvCfg):
         nconmax=2000,
         impratio=100.0,
         cone="elliptic",
-        update_data_interval=2,
+        # update_data_interval=2,
         iterations=20,
         ls_iterations=100,
         ccd_iterations=80,
