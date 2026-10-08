@@ -187,15 +187,16 @@ class FrankaMultiSceneCfg(InteractiveSceneCfg):
         ),
     )
 
-    # Kinematic KLT crate. The file is authored upside down, so rot is a half turn
-    # about X. Scale 1 is half of the crate that hung off the table, and z = 0.075
-    # puts that smaller crate on the tabletop.
+    # Kinematic KLT crate. The file is authored with the opening facing down, and
+    # Viser keeps that orientation, so the negative Z scale turns the opening up.
+    # Scale 1.5 makes the opening longer than the 0.20 m cable. z = 0.1125 sits it
+    # on the table.
     bin: RigidObjectCfg = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/bin",
-        init_state=RigidObjectCfg.InitialStateCfg(pos=(0.42, 0.30, 0.075), rot=(0.0, 1.0, 0.0, 0.0)),
+        init_state=RigidObjectCfg.InitialStateCfg(pos=(0.42, 0.28, 0.1125), rot=(1.0, 0.0, 0.0, 0.0)),
         spawn=sim_utils.UsdFileCfg(
             usd_path=f"{ISAAC_NUCLEUS_DIR}/Props/KLT_Bin/small_KLT.usd",
-            scale=(1.0, 1.0, 1.0),
+            scale=(1.5, 1.5, -1.5),
             rigid_props=sim_utils.RigidBodyPropertiesCfg(
                 kinematic_enabled=True,
                 disable_gravity=True,
@@ -267,10 +268,10 @@ class FrankaMultiPickPlaceEnvCfg(DirectRLEnvCfg):
     cable_contact_ke: float = 1.0e4
     cable_contact_kd: float = 1.0e-1
 
-    bin_size_x: float = 0.30
-    bin_size_y: float = 0.20
-    bin_height: float = 0.15
-    bin_root_z: float = 0.075
+    bin_size_x: float = 0.33
+    bin_size_y: float = 0.24
+    bin_height: float = 0.22
+    bin_root_z: float = 0.1125
 
     # Scene Interactive configuration (Declarative multi-env scene)
     scene: FrankaMultiSceneCfg = FrankaMultiSceneCfg(num_envs=4096, env_spacing=4.0, replicate_physics=True)
@@ -291,7 +292,7 @@ class FrankaMultiPickPlaceEnvCfg(DirectRLEnvCfg):
 
     # Left quadrant: Target Bin
     bin_reset_pos_x_range: tuple[float, float] = (0.35, 0.50)
-    bin_reset_pos_y_range: tuple[float, float] = (0.24, 0.36)
+    bin_reset_pos_y_range: tuple[float, float] = (0.22, 0.32)
 
     # Safety distance between spawned items to prevent overlap
     min_separation_distance: float = 0.15
