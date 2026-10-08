@@ -42,7 +42,8 @@ def spawn_hollow_bin(
         xform.AddTranslateOp().Set(Gf.Vec3d(*translation))
         xform_ops.append("xformOp:translate")
     if orientation is not None:
-        xform.AddOrientOp().Set(Gf.Quatd(orientation[0], orientation[1], orientation[2], orientation[3]))
+        # AddOrientOp() is float precision, so the value must be GfQuatf.
+        xform.AddOrientOp().Set(Gf.Quatf(*orientation))
         xform_ops.append("xformOp:orient")
     if xform_ops:
         xform.GetXformOpOrderAttr().Set(xform_ops)
