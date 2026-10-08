@@ -193,7 +193,7 @@ class FrankaMultiSceneCfg(InteractiveSceneCfg):
     # on the table.
     bin: RigidObjectCfg = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/bin",
-        init_state=RigidObjectCfg.InitialStateCfg(pos=(0.42, 0.28, 0.1125), rot=(1, 0, 0, 0)),
+        init_state=RigidObjectCfg.InitialStateCfg(pos=(0.42, 0.28, 0.1125), rot=(0.707, 0, 0, 0.707)),
         spawn=sim_utils.UsdFileCfg(
             usd_path=f"{ISAAC_NUCLEUS_DIR}/Props/KLT_Bin/small_KLT.usd",
             scale=(1.5, 1.5, 1.5),
