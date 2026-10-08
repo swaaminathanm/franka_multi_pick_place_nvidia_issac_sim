@@ -302,12 +302,7 @@ class FrankaMultiPickPlaceEnv(DirectRLEnv):
 
         n = len(env_ids_tensor)
 
-        # 1. Reset Franka Panda robot
-        default_root_pose = self.robot.data.default_root_pose.torch[env_ids_tensor].clone()
-        default_root_vel = self.robot.data.default_root_vel.torch[env_ids_tensor].clone()
-        default_root_pose[:, :3] += self.scene.env_origins[env_ids_tensor]
-        self.robot.write_root_pose_to_sim_index(root_pose=default_root_pose, env_ids=env_ids_tensor)
-        self.robot.write_root_velocity_to_sim_index(root_velocity=default_root_vel, env_ids=env_ids_tensor)
+        # 1. Reset Franka Panda robot joints (fixed-base articulation remains anchored at env origin)
 
         joint_pos = self.robot_default_joint_pos[env_ids_tensor].clone()
         arm_noise = sample_uniform(
