@@ -5,21 +5,18 @@
 
 from __future__ import annotations
 
-import os
-
 import isaaclab.sim as sim_utils
 from isaaclab.actuators import ImplicitActuatorCfg
 from isaaclab.assets import ArticulationCfg, AssetBaseCfg, RigidObjectCfg
 from isaaclab.envs import DirectRLEnvCfg
 from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.sim import SimulationCfg
-from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR, ISAACLAB_NUCLEUS_DIR
+from isaaclab.utils.assets import ISAACLAB_NUCLEUS_DIR
 from isaaclab.utils.configclass import configclass
 from isaaclab_assets.robots.franka import FRANKA_PANDA_CFG
 from isaaclab_newton.physics import MJWarpSolverCfg, NewtonCfg
 
-_ASSETS_DIR = os.path.join(os.path.dirname(__file__), "assets")
-_HOLLOW_BIN_USD_PATH = os.path.join(_ASSETS_DIR, "hollow_bin.usda")
+from .hollow_bin_spawner import HollowBinCfg
 
 
 @configclass
@@ -192,21 +189,25 @@ class FrankaMultiSceneCfg(InteractiveSceneCfg):
         ),
     )
 
-    # Target Bin / Collection Tray (Hollow plastic container with open center)
+    # Target Bin / Collection Tray — built from 5 native Isaac Lab CuboidCfg
+    # primitives via HollowBinCfg (see hollow_bin_spawner.py).
+    # No external USDA file required; each box piece has its own visual_material
+    # so Viser renders all walls correctly in 3D.
     bin: RigidObjectCfg = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/bin",
         init_state=RigidObjectCfg.InitialStateCfg(
-            pos=[0.35, 0.30, 0.20],
-            rot=[1.0, 0.0, 0.0, 0.0],       
+            pos=[0.35, 0.30, 0.0],
+            rot=[1.0, 0.0, 0.0, 0.0],
         ),
-        spawn=sim_utils.UsdFileCfg(
-            usd_path=_HOLLOW_BIN_USD_PATH,
-            scale=(1.0, 1.0, 1.0),
-            rigid_props=sim_utils.RigidBodyPropertiesCfg(
-                kinematic_enabled=True,
-                disable_gravity=True,
-            ),
-            collision_props=sim_utils.CollisionPropertiesCfg(),
+        spawn=HollowBinCfg(
+            outer_size_x=0.20,
+            outer_size_y=0.20,
+            wall_height=0.08,
+            wall_thickness=0.016,
+            floor_thickness=0.008,
+            mass=0.50,
+            wall_color=(0.08, 0.30, 0.65),
+            floor_color=(0.28, 0.62, 0.90),
         ),
     )
 
