@@ -16,29 +16,7 @@ from isaaclab.utils.configclass import configclass
 from isaaclab_assets.robots.franka import FRANKA_PANDA_CFG
 from isaaclab_newton.physics import MJWarpSolverCfg, NewtonCfg
 
-_BIN_COLOR = (0.10, 0.45, 0.85)
-
-
-def _kinematic_box(prim_name: str, size: tuple[float, float, float], pos: tuple[float, float, float]) -> RigidObjectCfg:
-    """One kinematic box. Viser only keeps the size of a rigid body that owns a single shape."""
-    return RigidObjectCfg(
-        prim_path=f"{{ENV_REGEX_NS}}/{prim_name}",
-        init_state=RigidObjectCfg.InitialStateCfg(pos=list(pos), rot=[1.0, 0.0, 0.0, 0.0]),
-        spawn=sim_utils.CuboidCfg(
-            size=size,
-            rigid_props=sim_utils.RigidBodyPropertiesCfg(kinematic_enabled=True, disable_gravity=True),
-            collision_props=sim_utils.CollisionPropertiesCfg(),
-            mass_props=sim_utils.MassPropertiesCfg(mass=0.1),
-            physics_material=sim_utils.RigidBodyMaterialCfg(
-                friction_combine_mode="multiply",
-                restitution_combine_mode="multiply",
-                static_friction=1.0,
-                dynamic_friction=1.0,
-                restitution=0.0,
-            ),
-            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=_BIN_COLOR),
-        ),
-    )
+from .hollow_bin import HOLLOW_BIN
 
 
 @configclass
@@ -211,14 +189,12 @@ class FrankaMultiSceneCfg(InteractiveSceneCfg):
         ),
     )
 
-    # Each piece is its own kinematic body. Nested shapes under one body lose their
-    # local offsets in Viser, which is why the walls were drawn flat inside the floor.
-    # Centers are relative to the table point (0.35, 0.30, 0.0).
-    bin: RigidObjectCfg = _kinematic_box("bin", (0.20, 0.20, 0.01), (0.35, 0.30, 0.005))
-    bin_wall_left: RigidObjectCfg = _kinematic_box("bin_wall_left", (0.20, 0.02, 0.08), (0.35, 0.21, 0.05))
-    bin_wall_right: RigidObjectCfg = _kinematic_box("bin_wall_right", (0.20, 0.02, 0.08), (0.35, 0.39, 0.05))
-    bin_wall_front: RigidObjectCfg = _kinematic_box("bin_wall_front", (0.02, 0.16, 0.08), (0.44, 0.30, 0.05))
-    bin_wall_back: RigidObjectCfg = _kinematic_box("bin_wall_back", (0.02, 0.16, 0.08), (0.26, 0.30, 0.05))
+    # Built by create_hollow_bin() in hollow_bin.py around (0.35, 0.30, 0.0).
+    bin: RigidObjectCfg = HOLLOW_BIN["bin"]
+    bin_wall_left: RigidObjectCfg = HOLLOW_BIN["bin_wall_left"]
+    bin_wall_right: RigidObjectCfg = HOLLOW_BIN["bin_wall_right"]
+    bin_wall_front: RigidObjectCfg = HOLLOW_BIN["bin_wall_front"]
+    bin_wall_back: RigidObjectCfg = HOLLOW_BIN["bin_wall_back"]
 
 
 @configclass
@@ -281,17 +257,9 @@ class FrankaMultiPickPlaceEnvCfg(DirectRLEnvCfg):
     cable_contact_ke: float = 1.0e4
     cable_contact_kd: float = 1.0e-1
 
-    bin_size_x: float = 0.16
-    bin_size_y: float = 0.16
+    bin_size_x: float = 0.24
+    bin_size_y: float = 0.24
     bin_height: float = 0.08
-    bin_floor_center_z: float = 0.005
-    # Wall centers relative to the bin's table contact point, in (left, right, front, back) order.
-    bin_wall_local_pos: tuple[tuple[float, float, float], ...] = (
-        (0.0, -0.09, 0.05),
-        (0.0, 0.09, 0.05),
-        (0.09, 0.0, 0.05),
-        (-0.09, 0.0, 0.05),
-    )
 
     # Scene Interactive configuration (Declarative multi-env scene)
     scene: FrankaMultiSceneCfg = FrankaMultiSceneCfg(num_envs=4096, env_spacing=4.0, replicate_physics=True)

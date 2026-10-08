@@ -18,6 +18,7 @@ from isaaclab.physics import PhysicsEvent
 from isaaclab.scene import InteractiveScene
 from isaaclab.utils.math import quat_apply, quat_from_euler_xyz, sample_uniform
 
+from .hollow_bin import place_bin, spawned_bin_parts
 from .multi_pick_place_env_cfg import FrankaMultiPickPlaceEnvCfg
 
 # Backward-compatibility fallback stub if anything calls clone_environments
@@ -49,9 +50,7 @@ class FrankaMultiPickPlaceEnv(DirectRLEnv):
         self.cube_default_root_vel = self.cube.data.default_root_vel.torch.clone()
         self.cable_default_root_pose = self.cable.data.default_root_pose.torch.clone()
         self.cable_default_root_vel = self.cable.data.default_root_vel.torch.clone()
-        self.bin_default_root_pose = self.bin.data.default_root_pose.torch.clone()
-        self.bin_default_root_vel = self.bin.data.default_root_vel.torch.clone()
-        self.bin_wall_default_root_pose = [wall.data.default_root_pose.torch.clone() for wall in self.bin_walls]
+        self.bin_part_default_pose = [part.data.default_root_pose.torch.clone() for part in self.bin_parts]
 
         # Buffers for actions and targets
         self.robot_dof_targets = self.robot_default_joint_pos.clone()
@@ -111,12 +110,7 @@ class FrankaMultiPickPlaceEnv(DirectRLEnv):
         self.cube = self.scene["cube"]
         self.cable = self.scene["cable"]
         self.bin = self.scene["bin"]
-        self.bin_walls = [
-            self.scene["bin_wall_left"],
-            self.scene["bin_wall_right"],
-            self.scene["bin_wall_front"],
-            self.scene["bin_wall_back"],
-        ]
+        self.bin_parts = spawned_bin_parts(self.scene)
 
     def close(self):
         """Cleanup environment and deregister Newton callbacks."""
@@ -338,7 +332,6 @@ class FrankaMultiPickPlaceEnv(DirectRLEnv):
         # 2. Non-overlapping Rejection Sampling for Cube, Cable, and Bin
         cube_pose = self.cube_default_root_pose[env_ids_tensor].clone()
         cable_pose = self.cable_default_root_pose[env_ids_tensor].clone()
-        bin_pose = self.bin_default_root_pose[env_ids_tensor].clone()
 
         # Sample Cube positions in right quadrant
         cube_x = sample_uniform(self.cfg.cube_reset_pos_x_range[0], self.cfg.cube_reset_pos_x_range[1], (n,), self.device)
@@ -392,24 +385,7 @@ class FrankaMultiPickPlaceEnv(DirectRLEnv):
         self.cable.write_root_pose_to_sim_index(root_pose=cable_pose, env_ids=env_ids_tensor)
         self.cable.write_root_velocity_to_sim_index(root_velocity=cable_vel, env_ids=env_ids_tensor)
 
-        # Move the floor and the four walls by the same table point.
-        env_origins = self.scene.env_origins[env_ids_tensor]
-        bin_pose[:, 0] = bin_x
-        bin_pose[:, 1] = bin_y
-        bin_pose[:, 2] = self.cfg.bin_floor_center_z
-        bin_pose[:, :3] += env_origins
-        bin_vel = torch.zeros_like(bin_pose[:, :6])
-        self.bin.write_root_pose_to_sim_index(root_pose=bin_pose, env_ids=env_ids_tensor)
-        self.bin.write_root_velocity_to_sim_index(root_velocity=bin_vel, env_ids=env_ids_tensor)
-        for wall, default_pose, offset in zip(self.bin_walls, self.bin_wall_default_root_pose, self.cfg.bin_wall_local_pos):
-            wall_pose = default_pose[env_ids_tensor].clone()
-            wall_pose[:, 0] = bin_x + offset[0]
-            wall_pose[:, 1] = bin_y + offset[1]
-            wall_pose[:, 2] = offset[2]
-            wall_pose[:, :3] += env_origins
-            wall_vel = torch.zeros_like(wall_pose[:, :6])
-            wall.write_root_pose_to_sim_index(root_pose=wall_pose, env_ids=env_ids_tensor)
-            wall.write_root_velocity_to_sim_index(root_velocity=wall_vel, env_ids=env_ids_tensor)
+        place_bin(self.bin_parts, self.bin_part_default_pose, self.scene.env_origins, env_ids_tensor, bin_x, bin_y)
 
     # --------------------------------------------------------------------------
     # Newton Physics & MuJoCo Contact Callbacks
