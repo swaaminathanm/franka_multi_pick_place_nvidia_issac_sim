@@ -187,14 +187,15 @@ class FrankaMultiSceneCfg(InteractiveSceneCfg):
         ),
     )
 
-    # Kinematic KLT crate from Isaac Lab. Scale 2 makes it 0.20 x 0.30 x 0.15 m.
-    # The root at z = 0.15 sits that crate on the table.
+    # Kinematic KLT crate. The file is authored upside down, so rot is a half turn
+    # about X. Scale 1 is half of the crate that hung off the table, and z = 0.075
+    # puts that smaller crate on the tabletop.
     bin: RigidObjectCfg = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/bin",
-        init_state=RigidObjectCfg.InitialStateCfg(pos=(0.42, 0.30, 0.15), rot=(1.0, 0.0, 0.0, 0.0)),
+        init_state=RigidObjectCfg.InitialStateCfg(pos=(0.42, 0.30, 0.075), rot=(0.0, 1.0, 0.0, 0.0)),
         spawn=sim_utils.UsdFileCfg(
             usd_path=f"{ISAAC_NUCLEUS_DIR}/Props/KLT_Bin/small_KLT.usd",
-            scale=(2.0, 2.0, 2.0),
+            scale=(1.0, 1.0, 1.0),
             rigid_props=sim_utils.RigidBodyPropertiesCfg(
                 kinematic_enabled=True,
                 disable_gravity=True,
@@ -266,10 +267,10 @@ class FrankaMultiPickPlaceEnvCfg(DirectRLEnvCfg):
     cable_contact_ke: float = 1.0e4
     cable_contact_kd: float = 1.0e-1
 
-    bin_size_x: float = 0.20
-    bin_size_y: float = 0.30
+    bin_size_x: float = 0.30
+    bin_size_y: float = 0.20
     bin_height: float = 0.15
-    bin_root_z: float = 0.15
+    bin_root_z: float = 0.075
 
     # Scene Interactive configuration (Declarative multi-env scene)
     scene: FrankaMultiSceneCfg = FrankaMultiSceneCfg(num_envs=4096, env_spacing=4.0, replicate_physics=True)
