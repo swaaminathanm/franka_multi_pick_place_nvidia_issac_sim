@@ -387,7 +387,7 @@ class FrankaMultiPickPlaceEnv(DirectRLEnv):
         bin_pose[:, 0] = bin_x
         bin_pose[:, 1] = bin_y
         bin_pose[:, 2] = self.cfg.bin_root_z
-        bin_pose[:, 3:7] = torch.tensor((1.0, 0.0, 0.0, 0.0), device=self.device)
+        bin_pose[:, 3:7] = torch.tensor((0.0, 0.707, 0.707, 0.0), device=self.device)
         bin_pose[:, :3] += self.scene.env_origins[env_ids_tensor]
         bin_vel = torch.zeros_like(bin_pose[:, :6])
         self.bin.write_root_pose_to_sim_index(root_pose=bin_pose, env_ids=env_ids_tensor)
