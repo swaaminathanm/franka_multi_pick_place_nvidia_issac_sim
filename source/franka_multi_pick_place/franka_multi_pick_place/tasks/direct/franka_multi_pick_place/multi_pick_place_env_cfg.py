@@ -86,15 +86,29 @@ class FrankaMultiSceneCfg(InteractiveSceneCfg):
         init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, -1.05)),
     )
 
-    # Table mount (replicated per environment under {ENV_REGEX_NS})
+    # Workstation table (replicated per environment under {ENV_REGEX_NS})
+    # Clean procedural workstation tabletop eliminating the overhead L-shaped camera mount rod.
+    # To change the table color, adjust diffuse_color below:
+    #   Light Studio Gray: (0.75, 0.75, 0.78)
+    #   Birch Wood:        (0.80, 0.72, 0.58)
+    #   Matte White:       (0.90, 0.90, 0.92)
+    #   Slate / Charcoal:  (0.25, 0.25, 0.28)
     table: AssetBaseCfg = AssetBaseCfg(
         prim_path="{ENV_REGEX_NS}/Table",
-        spawn=sim_utils.UsdFileCfg(
-            usd_path=f"{ISAAC_NUCLEUS_DIR}/Props/Mounts/SeattleLabTable/table_instanceable.usd"
+        spawn=sim_utils.CuboidCfg(
+            size=(1.2, 1.0, 1.05),
+            collision_props=sim_utils.CollisionPropertiesCfg(),
+            physics_material=sim_utils.RigidBodyMaterialCfg(
+                friction_combine_mode="multiply",
+                restitution_combine_mode="multiply",
+                static_friction=1.0,
+                dynamic_friction=1.0,
+                restitution=0.0,
+            ),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.75, 0.75, 0.78)),
         ),
         init_state=AssetBaseCfg.InitialStateCfg(
-            pos=(0.5, 0.0, 0.0),
-            rot=(0.0, 0.0, 0.70711, 0.70711),
+            pos=(0.5, 0.0, -0.525),
         ),
     )
 
@@ -140,15 +154,16 @@ class FrankaMultiSceneCfg(InteractiveSceneCfg):
     )
 
     # Flexible Cable Payload (Capsule proxy for rigid kinematics/Newton solver)
+    # 3 cm diameter (0.015 m radius) vibrant safety orange cable for high visibility and reliable grasping
     cable: RigidObjectCfg = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/cable",
         init_state=RigidObjectCfg.InitialStateCfg(
-            pos=[0.48, 0.0, 0.005],
+            pos=[0.48, 0.0, 0.017],
             rot=[0.0, 0.0, 0.0, 1.0],
         ),
         spawn=sim_utils.CapsuleCfg(
-            radius=0.005,
-            height=0.38,
+            radius=0.015,
+            height=0.30,
             axis="X",
             rigid_props=sim_utils.RigidBodyPropertiesCfg(
                 solver_position_iteration_count=32,
@@ -169,7 +184,7 @@ class FrankaMultiSceneCfg(InteractiveSceneCfg):
                 dynamic_friction=1.2,
                 restitution=0.0,
             ),
-            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.95, 0.75, 0.1)),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 0.45, 0.0)),
         ),
     )
 
@@ -248,9 +263,9 @@ class FrankaMultiPickPlaceEnvCfg(DirectRLEnvCfg):
     cube_size: float = 0.04
     cube_density: float = 400.0
 
-    cable_length: float = 0.38
+    cable_length: float = 0.30
     cable_segments: int = 19
-    cable_radius: float = 0.005
+    cable_radius: float = 0.015
     cable_density: float = 100.0
     cable_bend_stiffness: float = 5.0e-4
     cable_stretch_stiffness: float = 1.0e6

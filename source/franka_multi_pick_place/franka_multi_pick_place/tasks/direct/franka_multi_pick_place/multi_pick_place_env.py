@@ -350,7 +350,7 @@ class FrankaMultiPickPlaceEnv(DirectRLEnv):
         # Sample Cable positions in center quadrant
         cable_x = sample_uniform(self.cfg.cable_reset_pos_x_range[0], self.cfg.cable_reset_pos_x_range[1], (n,), self.device)
         cable_y = sample_uniform(self.cfg.cable_reset_pos_y_range[0], self.cfg.cable_reset_pos_y_range[1], (n,), self.device)
-        cable_z = torch.full((n,), self.cfg.cable_radius, device=self.device)
+        cable_z = torch.full((n,), self.cfg.cable_radius + 0.002, device=self.device)
 
         # Ensure spatial separation via rejection adjustment if distance < min_separation_distance
         dist_cube_cable = torch.hypot(cube_x - cable_x, cube_y - cable_y)
