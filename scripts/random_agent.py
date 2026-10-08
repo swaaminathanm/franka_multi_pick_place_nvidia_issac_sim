@@ -40,6 +40,7 @@ parser.add_argument(
     help="Name of the task (default: Franka-Multi-Pick-Place-Direct-v0).",
 )
 parser.add_argument("--max_steps", type=int, default=100, help="Number of steps to run without a visualizer.")
+parser.add_argument("--viser_port", type=int, default=8080, help="Port for Viser visualizer server (default: 8080).")
 
 # Append Isaac Lab AppLauncher CLI arguments
 add_launcher_args(parser)
@@ -59,6 +60,14 @@ def main():
 
     # Parse configuration via Hydra (supports preset overrides)
     env_cfg, _ = resolve_task_config(args_cli.task, "")
+
+    # Configure Viser visualizer port if Viser is selected
+    if getattr(args_cli, "visualizer", None) == "viser" or getattr(args_cli, "viz", None) == "viser":
+        try:
+            from isaaclab_visualizers.viser import ViserVisualizerCfg
+            env_cfg.sim.visualizer_cfgs = [ViserVisualizerCfg(port=args_cli.viser_port)]
+        except ImportError:
+            pass
 
     with launch_simulation(env_cfg, args_cli):
         # Override configuration with CLI arguments
