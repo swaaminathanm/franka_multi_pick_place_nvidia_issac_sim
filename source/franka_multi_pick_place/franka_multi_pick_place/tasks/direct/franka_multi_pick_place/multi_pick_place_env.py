@@ -121,10 +121,23 @@ class FrankaMultiPickPlaceEnv(DirectRLEnv):
             orientation=(0.0, 0.0, 0.70711, 0.70711),
         )
 
-        # Clone environments
-        self.scene.clone_environments(copy_from_source=False)
-        if self.device == "cpu":
-            self.scene.filter_collisions(global_prim_paths=[])
+        # Clone environments across Isaac Lab versions
+        if hasattr(self.scene, "clone_environments"):
+            self.scene.clone_environments(copy_from_source=False)
+        else:
+            from isaaclab import cloner
+
+            src, dest = "/World/envs/env_0", "/World/envs/env_{}"
+            pos = cloner.grid_transforms(self.scene.num_envs, self.scene.cfg.env_spacing, device=self.device)[0]
+            global_paths = ("/World/ground",)
+            plan = cloner.clone_plan_from_env_0(
+                src, dest, self.scene.num_envs, self.device, pos, global_paths=global_paths
+            )
+            cloner.replicate(plan, stage=self.scene.stage)
+
+        if hasattr(self.scene, "filter_collisions"):
+            if "physx" in getattr(self.scene, "physics_backend", "") or self.device == "cpu":
+                self.scene.filter_collisions(global_prim_paths=["/World/ground"])
 
         # Register entities to scene
         self.scene.articulations["robot"] = self.robot
