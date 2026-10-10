@@ -262,19 +262,6 @@ class FrankaMultiPickPlaceEnv(DirectRLEnv):
 
     def _get_dones(self) -> tuple[torch.Tensor, torch.Tensor]:
         """Compute episode termination (object dropped) and truncation (timeout)."""
-        # TEMP DEBUG: runs after the physics step, before any new reset.
-        if getattr(self, "_debug_cube_steps", 0) > 0:
-            env = self._debug_cube_env
-            pos = self.cube.data.root_pos_w.torch[env] - self.scene.env_origins[env]
-            vel = self.cube.data.root_com_lin_vel_w.torch[env]
-            step = 6 - self._debug_cube_steps
-            print(
-                f"[cube-trace] env {env} step {step} "
-                f"xyz=({pos[0]:.3f}, {pos[1]:.3f}, {pos[2]:.3f}) "
-                f"vel=({vel[0]:.3f}, {vel[1]:.3f}, {vel[2]:.3f})"
-            )
-            self._debug_cube_steps -= 1
-
         cube_pos_z = (self.cube.data.root_pos_w.torch - self.scene.env_origins)[:, 2]
         cable_pos_z = (self.cable.data.root_pos_w.torch - self.scene.env_origins)[:, 2]
 
@@ -403,21 +390,6 @@ class FrankaMultiPickPlaceEnv(DirectRLEnv):
         bin_vel = torch.zeros_like(bin_pose[:, :6])
         self.bin.write_root_pose_to_sim_index(root_pose=bin_pose, env_ids=env_ids_tensor)
         self.bin.write_root_velocity_to_sim_index(root_velocity=bin_vel, env_ids=env_ids_tensor)
-
-        origin = self.scene.env_origins[env_ids_tensor]
-        cube_now = self.cube.data.root_pos_w.torch[env_ids_tensor] - origin
-        cable_now = self.cable.data.root_pos_w.torch[env_ids_tensor] - origin
-        bin_now = self.bin.data.root_pos_w.torch[env_ids_tensor] - origin
-        for i in range(n):
-            print(
-                f"[reset] env {int(env_ids_tensor[i])} "
-                f"cube xyz=({cube_now[i, 0]:.3f}, {cube_now[i, 1]:.3f}, {cube_now[i, 2]:.3f}) "
-                f"cable xyz=({cable_now[i, 0]:.3f}, {cable_now[i, 1]:.3f}, {cable_now[i, 2]:.3f}) "
-                f"bin xyz=({bin_now[i, 0]:.3f}, {bin_now[i, 1]:.3f}, {bin_now[i, 2]:.3f})"
-            )
-        # TEMP DEBUG: trace where the physics keeps the cube after a reset.
-        self._debug_cube_env = int(env_ids_tensor[0])
-        self._debug_cube_steps = 5
 
     # --------------------------------------------------------------------------
     # Newton Physics & MuJoCo Contact Callbacks

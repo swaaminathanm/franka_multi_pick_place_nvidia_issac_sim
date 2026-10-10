@@ -145,6 +145,11 @@ def main():
             hand_z = torch.zeros(num_envs, 3, device=device, dtype=ee_quat.dtype)
             hand_z[:, 2] = 1.0
             finger_z = quat_apply(ee_quat, hand_z)[:, 2]
+            # Hand Y is the jaw opening. In the world it must lie on X or Y.
+            jaw_y = torch.zeros(num_envs, 3, device=device, dtype=ee_quat.dtype)
+            jaw_y[:, 1] = 1.0
+            jaw_axis = quat_apply(ee_quat, jaw_y)
+            jaws_aligned = (jaw_axis[:, 0].abs() > 0.95) | (jaw_axis[:, 1].abs() > 0.95)
 
             # Gripper command buffer (+1.0 = open, -1.0 = closed)
             gripper_cmds = torch.ones((num_envs, 1), device=device)
@@ -176,12 +181,12 @@ def main():
                     gripper_cmds[e] = 1.0
 
                     dist = torch.norm(ee_pos[e] - desired_pos[e])
-                    if dist < 0.04 and finger_z[e] < -0.95:
+                    if dist < 0.04 and finger_z[e] < -0.95 and jaws_aligned[e]:
                         dwell_counters[e] += 1
                         if dwell_counters[e] == 20:
                             states[e] = CubeTaskState.DESCEND_CUBE
                             dwell_counters[e] = 0
-                            print(f"[Env {e}] Gripper aligned, fingertips down")
+                            print(f"[Env {e}] Gripper aligned, jaws on cube faces")
                     else:
                         dwell_counters[e] = 0
 
@@ -210,9 +215,6 @@ def main():
             pos_err = desired_pos - current_target_pos
             current_target_pos += torch.clamp(pos_err, -max_step_m, max_step_m)
 
-            # Roll 180 lays the fingertips down. Pitch 0 keeps them vertical.
-            # Yaw 0 puts the jaws on two opposite faces. Yaw 90 is the other pair.
-            # Yaw 45 is the diagonal.
             aligning = states == CubeTaskState.ALIGN_CUBE
             roll = torch.full((num_envs,), math.radians(180.0), device=device)
             pitch = torch.zeros(num_envs, device=device)
