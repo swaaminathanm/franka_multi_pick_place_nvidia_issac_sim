@@ -151,14 +151,19 @@ def main():
             jaw_axis = quat_apply(ee_quat, jaw_y)
             jaws_aligned = (jaw_axis[:, 0].abs() > 0.95) | (jaw_axis[:, 1].abs() > 0.95)
             grasp_offset = to_torch(direct_env.grasp_frame_offset).reshape(1, 3).to(device=device, dtype=ee_quat.dtype)
-            tip_offset_w = quat_apply(ee_quat, grasp_offset.expand(num_envs, 3))
-            fingertip_pos = ee_pos + tip_offset_w
+            fingertip_pos = ee_pos + quat_apply(ee_quat, grasp_offset.expand(num_envs, 3))
+            # Downward pose. Its fingertip offset is straight down, so the palm
+            # sits on the cube's X and Y and the fingers hang through the center.
+            roll = torch.full((num_envs,), math.radians(180.0), device=device)
+            pitch = torch.zeros(num_envs, device=device)
+            yaw = torch.zeros(num_envs, device=device)
+            down_quat = quat_from_euler_xyz(roll, pitch, yaw)
+            down_tip_w = quat_apply(down_quat, grasp_offset.expand(num_envs, 3))
             hover_pos = cube_pos.clone()
             hover_pos[:, 2] += 0.20
-            # Shift the hand so the fingertips, not the palm origin, sit on the cube's X and Y.
-            align_pos = hover_pos.clone()
-            align_pos[:, :2] = cube_pos[:, :2] - tip_offset_w[:, :2]
-            descend_pos = cube_pos - tip_offset_w
+            align_pos = cube_pos - down_tip_w
+            align_pos[:, 2] = hover_pos[:, 2]
+            descend_pos = cube_pos - down_tip_w
 
             # Gripper command buffer (+1.0 = open, -1.0 = closed)
             gripper_cmds = torch.ones((num_envs, 1), device=device)
@@ -223,10 +228,6 @@ def main():
                     pass
 
             max_step_m = 0.008  # ~0.48 m/s speed limit
-            roll = torch.full((num_envs,), math.radians(180.0), device=device)
-            pitch = torch.zeros(num_envs, device=device)
-            yaw = torch.zeros(num_envs, device=device)
-            down_quat = quat_from_euler_xyz(roll, pitch, yaw)
             dot = torch.sum(current_target_quat * down_quat, dim=-1, keepdim=True)
             down_quat = torch.where(dot < 0.0, -down_quat, down_quat)
 
