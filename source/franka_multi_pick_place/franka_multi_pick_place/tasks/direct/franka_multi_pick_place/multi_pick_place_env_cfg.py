@@ -286,11 +286,12 @@ class FrankaMultiPickPlaceEnvCfg(DirectRLEnvCfg):
     action_scale: tuple[float, ...] = (1.10, 1.60, 0.70, 2.70, 0.45, 0.80, 0.30)
     newton_contact: FrankaMultiNewtonContactCfg = FrankaMultiNewtonContactCfg()
 
-    # Reset bounds. Tabletop y is [-0.5, 0.5]. Y spans that width with an inset so
-    # the payload stays off the lip. X is only a few centimeters, and the two bands
-    # stay apart and in front of the bin (bin body starts near x = 0.645).
+    # Reset bounds. At the cube's X and the 20 cm hover height, the hand can
+    # reliably reach about ±0.20 m in Y. Past that the workspace thins out.
+    # X is only a few centimeters, and the two bands stay apart and in front
+    # of the bin (bin body starts near x = 0.645).
     cube_reset_pos_x_range: tuple[float, float] = (0.27, 0.31)
-    cube_reset_pos_y_range: tuple[float, float] = (-0.43, 0.43)
+    cube_reset_pos_y_range: tuple[float, float] = (-0.20, 0.20)
 
     cable_reset_pos_x_range: tuple[float, float] = (0.48, 0.52)
     cable_reset_pos_y_range: tuple[float, float] = (-0.40, 0.40)
