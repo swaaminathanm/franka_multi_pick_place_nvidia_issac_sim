@@ -174,8 +174,9 @@ def main():
                     # Hover 20 cm above the cube (fingertip clearance ~10 cm)
                     gripper_cmds[e] = 1.0
 
-                    dist = torch.norm(ee_pos[e] - hover_pos[e])
-                    if dist < 0.03:
+                    tip_xy = torch.norm(fingertip_pos[e, :2] - cube_pos[e, :2])
+                    height = torch.abs(ee_pos[e, 2] - hover_pos[e, 2])
+                    if tip_xy < 0.03 and height < 0.03:
                         dwell_counters[e] += 1
                         if dwell_counters[e] == 30:
                             states[e] = CubeTaskState.ALIGN_CUBE
@@ -223,15 +224,15 @@ def main():
                 elif st == CubeTaskState.DONE:
                     pass
 
-            # One position goal and one quaternion goal. Hover goes to a point.
-            # Align and descend add the fingertip miss so the fingers walk onto the cube.
+            # One position goal. Every approach state shifts X and Y by the
+            # fingertip miss, so the fingers walk onto the cube center.
             hovering = states == CubeTaskState.HOVER_CUBE
             aligning = states == CubeTaskState.ALIGN_CUBE
             descending = states == CubeTaskState.DESCEND_CUBE
+            centering = hovering | aligning | descending
             pos_goal = current_target_pos.clone()
-            pos_goal[hovering] = hover_pos[hovering]
-            centering = aligning | descending
             pos_goal[centering, :2] = current_target_pos[centering, :2] + tip_err_xy[centering]
+            pos_goal[hovering, 2] = hover_pos[hovering, 2]
             pos_goal[aligning, 2] = hover_pos[aligning, 2]
             pos_goal[descending, 2] = (cube_pos[:, 2] - down_tip_w[:, 2])[descending]
             max_step_m = 0.008  # ~0.48 m/s speed limit
