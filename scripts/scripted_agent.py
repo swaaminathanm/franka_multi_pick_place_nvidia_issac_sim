@@ -158,7 +158,6 @@ def main():
 
             # Gripper command buffer (+1.0 = open, -1.0 = closed)
             gripper_cmds = torch.ones((num_envs, 1), device=device)
-            desired_pos = ee_pos.clone()
 
             # -------------------------------------------------------------
             # Finite State Machine Logic (Hover through descend, later states pass)
@@ -168,7 +167,6 @@ def main():
 
                 if st == CubeTaskState.HOVER_CUBE:
                     # Hover 20 cm above the cube (fingertip clearance ~10 cm)
-                    desired_pos[e] = hover_pos[e]
                     gripper_cmds[e] = 1.0
 
                     dist = torch.norm(ee_pos[e] - hover_pos[e])
@@ -228,6 +226,11 @@ def main():
             dot = torch.sum(current_target_quat * down_quat, dim=-1, keepdim=True)
             down_quat = torch.where(dot < 0.0, -down_quat, down_quat)
 
+            hovering = states == CubeTaskState.HOVER_CUBE
+            if hovering.any():
+                pos_err = hover_pos - current_target_pos
+                current_target_pos[hovering] += torch.clamp(pos_err[hovering], -max_step_m, max_step_m)
+
             aligning = states == CubeTaskState.ALIGN_CUBE
             if aligning.any():
                 pos_err = hover_pos - current_target_pos
@@ -241,11 +244,6 @@ def main():
                 pos_err = descend_pos - current_target_pos
                 current_target_pos[descending] += torch.clamp(pos_err[descending], -max_step_m, max_step_m)
                 current_target_quat[descending] = down_quat[descending]
-
-            holding = ~(aligning | descending)
-            if holding.any():
-                pos_err = desired_pos - current_target_pos
-                current_target_pos[holding] += torch.clamp(pos_err[holding], -max_step_m, max_step_m)
 
             # -------------------------------------------------------------
             # Pose IK. The quaternion is only the converted Euler angle.
