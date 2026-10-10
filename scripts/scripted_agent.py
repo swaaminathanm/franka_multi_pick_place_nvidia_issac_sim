@@ -93,9 +93,9 @@ def main():
 
         print("=" * 60)
         print(f"[INFO]: Initializing Scripted IK Agent for {num_envs} envs on {device}")
-        # 1. Setup Differential IK Controller in position mode (smoothly track target xyz)
+        # 1. Setup Differential IK Controller
         ik_cfg = DifferentialIKControllerCfg(
-            command_type="position",
+            command_type="pose",
             use_relative_mode=False,
             ik_method="dls",
         )
@@ -142,49 +142,88 @@ def main():
             cube_pos = cube_pos_w - direct_env.scene.env_origins
             bin_pos = bin_pos_w - direct_env.scene.env_origins
 
-            # -------------------------------------------------------------
-            # Target: Directly on top of the cube (+10 cm above cube)
-            # -------------------------------------------------------------
-            target_hover_pos = cube_pos.clone()
-            target_hover_pos[:, 2] += 0.10
+            # Gripper command buffer (+1.0 = open, -1.0 = closed)
+            gripper_cmds = torch.ones((num_envs, 1), device=device)
+            desired_pos = ee_pos.clone()
 
-            # Smooth interpolation towards the hover target (no dynamic jerking)
+            # -------------------------------------------------------------
+            # 3. Finite State Machine Logic (Hover implemented, others pass)
+            # -------------------------------------------------------------
+            for e in range(num_envs):
+                st = states[e].item()
+
+                if st == CubeTaskState.HOVER_CUBE:
+                    # Hover 12 cm above the cube with gripper open
+                    desired_pos[e] = cube_pos[e].clone()
+                    desired_pos[e, 2] += 0.12
+                    gripper_cmds[e] = 1.0
+
+                    if torch.norm(ee_pos[e] - desired_pos[e]) < 0.02:
+                        dwell_counters[e] += 1
+                        if dwell_counters[e] % 30 == 1:
+                            print(f"[Env {e}] Arrived on top of cube -> Holding Hover")
+                        # Keep hovering on top of cube; other actions pass
+                        pass
+
+                elif st == CubeTaskState.DESCEND_CUBE:
+                    pass
+
+                elif st == CubeTaskState.GRASP_CUBE:
+                    pass
+
+                elif st == CubeTaskState.LIFT_CUBE:
+                    pass
+
+                elif st == CubeTaskState.CARRY_TO_BIN:
+                    pass
+
+                elif st == CubeTaskState.RELEASE_CUBE:
+                    pass
+
+                elif st == CubeTaskState.DONE:
+                    pass
+
+            # -------------------------------------------------------------
+            # 4. Smooth Trajectory Interpolation (No violent jerking)
+            # -------------------------------------------------------------
             max_step_m = 0.008  # ~0.48 m/s speed limit
-            pos_err = target_hover_pos - current_target_pos
+            pos_err = desired_pos - current_target_pos
             current_target_pos += torch.clamp(pos_err, -max_step_m, max_step_m)
 
-            # Set position command for Differential IK
-            ik_controller.set_command(current_target_pos, ee_quat=ee_quat)
+            # -------------------------------------------------------------
+            # 5. Inverse Kinematics (IK) Calculation via Newton View & DifferentialIKController
+            # -------------------------------------------------------------
+            target_pose_7d = torch.cat([current_target_pos, ee_quat_down], dim=-1)
+            ik_controller.set_command(target_pose_7d)
 
-            # Newton geometric Jacobian for fixed-base Franka (fixed-root excluded):
+            # Newton geometric Jacobian for fixed-base articulation (fixed-root excluded):
             jacobi_ee_idx = ee_body_idx - 1
             jacobian = to_torch(robot.data.body_link_jacobian_w)[:, jacobi_ee_idx, :, arm_joint_indices]
+
             current_arm_q = to_torch(robot.data.joint_pos)[:, arm_joint_indices]
 
-            # Solve joint targets via Newton Jacobian & DifferentialIK
             q_des = ik_controller.compute(ee_pos, ee_quat, jacobian, current_arm_q)
 
-            # Convert to normalized 8D action in [-1, 1]
+            # -------------------------------------------------------------
+            # 6. Convert Joint Angles into Normalized 8D Action [-1, 1]
+            # -------------------------------------------------------------
+            # Formula: a_i = (q_des - q_default) / action_scale
             arm_action = (q_des - default_joint_pos) / arm_action_scale.unsqueeze(0)
             arm_action = torch.clamp(arm_action, -1.0, 1.0)
 
-            # Gripper remains open (+1.0)
-            gripper_cmds = torch.ones((num_envs, 1), device=device)
+            # Combine arm actions (0-6) and gripper action (7)
             actions = torch.cat([arm_action, gripper_cmds], dim=-1)
 
             # Step environment
             with torch.inference_mode():
                 obs, rew, terminated, truncated, info = env.step(actions)
 
-            # On episode reset, re-sync target position to the robot's hand position
+            # Auto-reset protection: re-sync target position & FSM if episode resets
             if terminated.any() or truncated.any():
                 body_pos_w = to_torch(robot.data.body_pos_w)
                 current_target_pos = (body_pos_w[:, ee_body_idx] - direct_env.scene.env_origins).clone()
-
-            # Progress printout every 20 steps
-            dist_to_hover = torch.norm(ee_pos[0] - target_hover_pos[0]).item()
-            if step % 20 == 0 or dist_to_hover < 0.02:
-                print(f"[Step {step:4d}] Hovering on cube | EE: ({ee_pos[0,0]:.3f}, {ee_pos[0,1]:.3f}, {ee_pos[0,2]:.3f}) | Target: ({target_hover_pos[0,0]:.3f}, {target_hover_pos[0,1]:.3f}, {target_hover_pos[0,2]:.3f}) | Dist: {dist_to_hover*100:.1f} cm")
+                states[:] = CubeTaskState.HOVER_CUBE
+                dwell_counters[:] = 0
 
             step += 1
             if not sim.visualizers and step >= args_cli.max_steps:
