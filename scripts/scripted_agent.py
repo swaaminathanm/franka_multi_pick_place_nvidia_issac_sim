@@ -151,10 +151,12 @@ def main():
             jaw_axis = quat_apply(ee_quat, jaw_y)
             jaws_aligned = (jaw_axis[:, 0].abs() > 0.95) | (jaw_axis[:, 1].abs() > 0.95)
             grasp_offset = to_torch(direct_env.grasp_frame_offset).reshape(1, 3).to(device=device, dtype=ee_quat.dtype)
-            fingertip_w = quat_apply(ee_quat, grasp_offset.expand(num_envs, 3))
+            # Height only. A tilted hand quaternion would otherwise shift the goal sideways off the cube.
+            fingertip_z = grasp_offset[0, 2]
             hover_pos = cube_pos.clone()
             hover_pos[:, 2] += 0.20
-            descend_pos = cube_pos - fingertip_w
+            descend_pos = cube_pos.clone()
+            descend_pos[:, 2] += fingertip_z
 
             # Gripper command buffer (+1.0 = open, -1.0 = closed)
             gripper_cmds = torch.ones((num_envs, 1), device=device)
