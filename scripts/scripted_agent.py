@@ -230,6 +230,8 @@ def main():
             if hovering.any():
                 pos_err = hover_pos - current_target_pos
                 current_target_pos[hovering] += torch.clamp(pos_err[hovering], -max_step_m, max_step_m)
+                # Track the measured orientation so the pose IK only has to reach the point.
+                current_target_quat[hovering] = ee_quat[hovering]
 
             aligning = states == CubeTaskState.ALIGN_CUBE
             if aligning.any():
