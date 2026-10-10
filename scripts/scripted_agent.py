@@ -34,6 +34,36 @@ from isaaclab.controllers import DifferentialIKController, DifferentialIKControl
 import franka_multi_pick_place.tasks  # noqa: F401
 
 
+def to_torch(data):
+    """Helper to unwrap Warp buffers to PyTorch."""
+    if hasattr(data, "torch"):
+        return data.torch
+    return data
+
+
+def get_newton_jacobian(robot, ee_body_idx: int, arm_joint_indices):
+    """Retrieve Jacobian from Newton's native ArticulationView (_root_view / _view)."""
+    view = getattr(robot, "_root_view", None) or getattr(robot, "_view", None)
+    if view is None:
+        raise AttributeError(
+            f"Newton ArticulationView not found on robot. Available attributes: {dir(robot)}"
+        )
+
+    if hasattr(view, "get_jacobians"):
+        raw_jacobian = view.get_jacobians()
+    elif hasattr(view, "eval_jacobian"):
+        raw_jacobian = view.eval_jacobian()
+    elif hasattr(robot.data, "jacobians"):
+        raw_jacobian = robot.data.jacobians
+    else:
+        raise AttributeError(
+            f"Newton ArticulationView does not expose get_jacobians or eval_jacobian. Available: {dir(view)}"
+        )
+
+    jacobian_torch = to_torch(raw_jacobian)
+    return jacobian_torch[:, ee_body_idx, :, arm_joint_indices]
+
+
 class CubeTaskState(IntEnum):
     """Finite State Machine states for Milestone 1 (Cube only)."""
     HOVER_CUBE = 0
@@ -87,21 +117,13 @@ def main():
 
         print("=" * 60)
         print(f"[INFO]: Initializing Scripted IK Agent for {num_envs} envs on {device}")
-        print("=" * 60)
-
-        # 1. Setup Differential IK Controller (Damped Least Squares)
+        # 1. Setup Differential IK Controller
         ik_cfg = DifferentialIKControllerCfg(
             command_type="pose",
             use_relative_mode=False,
             ik_method="dls",
         )
         ik_controller = DifferentialIKController(cfg=ik_cfg, num_envs=num_envs, device=device)
-
-        # Helper to unwrap Warp buffers to PyTorch
-        def to_torch(data):
-            if hasattr(data, "torch"):
-                return data.torch
-            return data
 
         # Cache robot constants
         robot = direct_env.robot
@@ -233,17 +255,14 @@ def main():
             current_target_pos += torch.clamp(pos_err, -max_step_m, max_step_m)
 
             # -------------------------------------------------------------
-            # 5. Inverse Kinematics (IK) Calculation
+            # 5. Inverse Kinematics (IK) Calculation via Newton View & DifferentialIKController
             # -------------------------------------------------------------
             target_pose_7d = torch.cat([current_target_pos, ee_quat_down], dim=-1)
             ik_controller.set_command(target_pose_7d)
 
-            # Retrieve Jacobian for panda_hand
-            raw_jacobian = to_torch(robot.root_physx_view.get_jacobians())
-            jacobian = raw_jacobian[:, ee_body_idx, :, arm_joint_indices]
+            jacobian = get_newton_jacobian(robot, ee_body_idx, arm_joint_indices)
             current_arm_q = to_torch(robot.data.joint_pos)[:, arm_joint_indices]
 
-            # Solve desired joint angles
             q_des = ik_controller.compute(ee_pos, ee_quat, jacobian, current_arm_q)
 
             # -------------------------------------------------------------
