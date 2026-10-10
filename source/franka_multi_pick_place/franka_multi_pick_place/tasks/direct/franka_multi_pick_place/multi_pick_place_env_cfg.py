@@ -283,7 +283,7 @@ class FrankaMultiPickPlaceEnvCfg(DirectRLEnvCfg):
     scene: FrankaMultiSceneCfg = FrankaMultiSceneCfg(num_envs=4096, env_spacing=4.0, replicate_physics=True)
 
     # Action scaling for Franka 7-DoF arm
-    action_scale: tuple[float, ...] = (0.45, 1.60, 0.70, 2.70, 0.45, 0.80, 0.30)
+    action_scale: tuple[float, ...] = (1.10, 1.60, 0.70, 2.70, 0.45, 0.80, 0.30)
     newton_contact: FrankaMultiNewtonContactCfg = FrankaMultiNewtonContactCfg()
 
     # Reset bounds. Tabletop y is [-0.5, 0.5]. Y spans that width with an inset so
