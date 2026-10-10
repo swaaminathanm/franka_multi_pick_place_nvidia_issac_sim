@@ -109,6 +109,8 @@ def main():
         arm_action_scale = to_torch(direct_env.arm_action_scale)  # shape: [7]
         default_joint_pos = to_torch(direct_env.robot_default_joint_pos)[:, arm_joint_indices]  # [num_envs, 7]
         ee_body_idx = direct_env.ee_body_idx
+        # Joint 7 spins about the fingertip axis once the hand points down.
+        wrist_arm_idx = [robot.joint_names[i] for i in arm_joint_indices].index("panda_joint7")
 
         # Reset environment first so physics states and buffers are fully initialized
         obs, _ = env.reset()
@@ -231,6 +233,32 @@ def main():
             current_arm_q = to_torch(robot.data.joint_pos)[:, arm_joint_indices]
 
             q_des = ik_controller.compute(ee_pos, ee_quat, jacobian, current_arm_q)
+
+            # The arm IK holds the hover and the fingers-down pitch. Jaw alignment
+            # is a pure spin about the fingertip axis, so it goes on joint 7 only.
+            # With the fingers down, increasing joint 7 decreases the jaw's yaw.
+            hand_y = torch.zeros(num_envs, 3, device=device, dtype=ee_quat.dtype)
+            hand_y[:, 1] = 1.0
+            hand_z = torch.zeros(num_envs, 3, device=device, dtype=ee_quat.dtype)
+            hand_z[:, 2] = 1.0
+            cube_x = torch.zeros(num_envs, 3, device=device, dtype=ee_quat.dtype)
+            cube_x[:, 0] = 1.0
+            opening = quat_apply(ee_quat, hand_y)
+            finger_z = quat_apply(ee_quat, hand_z)[:, 2]
+            cube_x_w = quat_apply(cube_quat_w, cube_x)
+            open_yaw = torch.atan2(opening[:, 1], opening[:, 0])
+            cube_yaw = torch.atan2(cube_x_w[:, 1], cube_x_w[:, 0])
+            delta = torch.atan2(torch.sin(open_yaw - cube_yaw), torch.cos(open_yaw - cube_yaw))
+            quarter = math.pi / 2.0
+            nearest = torch.round(delta / quarter) * quarter
+            yaw_err = torch.atan2(torch.sin(nearest - delta), torch.cos(nearest - delta))
+            fingers_down = finger_z < -0.5
+            q_des = q_des.clone()
+            q_des[:, wrist_arm_idx] = torch.where(
+                fingers_down,
+                current_arm_q[:, wrist_arm_idx] - yaw_err,
+                q_des[:, wrist_arm_idx],
+            )
 
             # -------------------------------------------------------------
             # 6. Convert Joint Angles into Normalized 8D Action [-1, 1]
