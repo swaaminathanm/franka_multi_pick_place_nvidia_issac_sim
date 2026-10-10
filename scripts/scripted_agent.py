@@ -40,30 +40,6 @@ def to_torch(data):
         return data.torch
     return data
 
-
-def get_newton_jacobian(robot, ee_body_idx: int, arm_joint_indices):
-    """Retrieve Jacobian from Newton's native ArticulationView (_root_view / _view)."""
-    view = getattr(robot, "_root_view", None) or getattr(robot, "_view", None)
-    if view is None:
-        raise AttributeError(
-            f"Newton ArticulationView not found on robot. Available attributes: {dir(robot)}"
-        )
-
-    if hasattr(view, "get_jacobians"):
-        raw_jacobian = view.get_jacobians()
-    elif hasattr(view, "eval_jacobian"):
-        raw_jacobian = view.eval_jacobian()
-    elif hasattr(robot.data, "jacobians"):
-        raw_jacobian = robot.data.jacobians
-    else:
-        raise AttributeError(
-            f"Newton ArticulationView does not expose get_jacobians or eval_jacobian. Available: {dir(view)}"
-        )
-
-    jacobian_torch = to_torch(raw_jacobian)
-    return jacobian_torch[:, ee_body_idx, :, arm_joint_indices]
-
-
 class CubeTaskState(IntEnum):
     """Finite State Machine states for Milestone 1 (Cube only)."""
     HOVER_CUBE = 0
@@ -260,7 +236,10 @@ def main():
             target_pose_7d = torch.cat([current_target_pos, ee_quat_down], dim=-1)
             ik_controller.set_command(target_pose_7d)
 
-            jacobian = get_newton_jacobian(robot, ee_body_idx, arm_joint_indices)
+            # Newton geometric Jacobian for fixed-base articulation (fixed-root excluded):
+            jacobi_ee_idx = ee_body_idx - 1
+            jacobian = to_torch(robot.data.body_link_jacobian_w)[:, jacobi_ee_idx, :, arm_joint_indices]
+
             current_arm_q = to_torch(robot.data.joint_pos)[:, arm_joint_indices]
 
             q_des = ik_controller.compute(ee_pos, ee_quat, jacobian, current_arm_q)
