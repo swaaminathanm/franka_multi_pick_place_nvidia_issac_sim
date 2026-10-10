@@ -93,9 +93,9 @@ def main():
 
         print("=" * 60)
         print(f"[INFO]: Initializing Scripted IK Agent for {num_envs} envs on {device}")
-        # 1. Setup Differential IK Controller in pose mode (smooth 6D pose tracking)
+        # 1. Setup Differential IK Controller in position mode (100% position priority)
         ik_cfg = DifferentialIKControllerCfg(
-            command_type="pose",
+            command_type="position",
             use_relative_mode=False,
             ik_method="dls",
         )
@@ -118,15 +118,6 @@ def main():
         body_quat_w = to_torch(robot.data.body_quat_w)
 
         current_target_pos = (body_pos_w[:, ee_body_idx] - direct_env.scene.env_origins).clone()
-        current_target_quat = body_quat_w[:, ee_body_idx].clone()
-
-        # Half-turn pitch around Y-axis to point fingers straight down into table (w=0, x=0, y=1, z=0)
-        target_down_quat = torch.tensor([[0.0, 0.0, 1.0, 0.0]], device=device).repeat(num_envs, 1)
-
-        print("=" * 60)
-        print(f"[DEBUG]: Hand start quat (w,x,y,z): {[round(x, 3) for x in body_quat_w[0, ee_body_idx].tolist()]}")
-        print(f"[DEBUG]: Target pitch-down quat:    [0.0, 0.0, 1.0, 0.0]")
-        print("=" * 60)
 
         # FSM State & dwell counters per environment
         states = torch.zeros(num_envs, dtype=torch.long, device=device)
@@ -191,23 +182,16 @@ def main():
                     pass
 
             # -------------------------------------------------------------
-            # 4. Smooth Trajectory & Orientation Interpolation
+            # 4. Smooth Trajectory Interpolation
             # -------------------------------------------------------------
             max_step_m = 0.008  # ~0.48 m/s speed limit
             pos_err = desired_pos - current_target_pos
             current_target_pos += torch.clamp(pos_err, -max_step_m, max_step_m)
 
-            # Smoothly rotate wrist toward natural downward orientation (no angular jerking)
-            dot = torch.sum(current_target_quat * target_down_quat, dim=-1, keepdim=True)
-            aligned_down_quat = torch.where(dot < 0.0, -target_down_quat, target_down_quat)
-            current_target_quat = current_target_quat + 0.03 * (aligned_down_quat - current_target_quat)
-            current_target_quat = current_target_quat / torch.linalg.norm(current_target_quat, dim=-1, keepdim=True)
-
             # -------------------------------------------------------------
             # 5. Inverse Kinematics (IK) Calculation via Newton View & DifferentialIKController
             # -------------------------------------------------------------
-            target_pose_7d = torch.cat([current_target_pos, current_target_quat], dim=-1)
-            ik_controller.set_command(target_pose_7d)
+            ik_controller.set_command(current_target_pos, ee_quat=ee_quat)
 
             # Newton geometric Jacobian for fixed-base articulation (fixed-root excluded):
             jacobi_ee_idx = ee_body_idx - 1
@@ -220,7 +204,6 @@ def main():
             # -------------------------------------------------------------
             # 6. Convert Joint Angles into Normalized 8D Action [-1, 1]
             # -------------------------------------------------------------
-            # Formula: a_i = (q_des - q_default) / action_scale
             arm_action = (q_des - default_joint_pos) / arm_action_scale.unsqueeze(0)
             arm_action = torch.clamp(arm_action, -1.0, 1.0)
 
@@ -231,12 +214,10 @@ def main():
             with torch.inference_mode():
                 obs, rew, terminated, truncated, info = env.step(actions)
 
-            # Auto-reset protection: re-sync target position & orientation if episode resets
+            # Auto-reset protection: re-sync target position if episode resets
             if terminated.any() or truncated.any():
                 body_pos_w = to_torch(robot.data.body_pos_w)
-                body_quat_w = to_torch(robot.data.body_quat_w)
                 current_target_pos = (body_pos_w[:, ee_body_idx] - direct_env.scene.env_origins).clone()
-                current_target_quat = body_quat_w[:, ee_body_idx].clone()
                 states[:] = CubeTaskState.HOVER_CUBE
                 dwell_counters[:] = 0
 
