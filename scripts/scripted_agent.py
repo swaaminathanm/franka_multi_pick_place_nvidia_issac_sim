@@ -30,7 +30,7 @@ except ImportError:
     from isaaclab_tasks.utils.preset_cli import setup_preset_cli
 
 from isaaclab.controllers import DifferentialIKController, DifferentialIKControllerCfg
-from isaaclab.utils.math import quat_apply, quat_from_euler_xyz, quat_mul
+from isaaclab.utils.math import euler_xyz_from_quat, quat_apply, quat_from_euler_xyz, quat_mul
 
 # Import custom task to register environment with Gymnasium
 import franka_multi_pick_place.tasks  # noqa: F401
@@ -137,6 +137,7 @@ def main():
             body_pos_w = to_torch(robot.data.body_pos_w)
             body_quat_w = to_torch(robot.data.body_quat_w)
             cube_pos_w = to_torch(direct_env.cube.data.root_pos_w)
+            cube_quat_w = to_torch(direct_env.cube.data.root_quat_w)
             bin_pos_w = to_torch(direct_env.bin.data.root_pos_w)
 
             ee_pos = body_pos_w[:, ee_body_idx] - direct_env.scene.env_origins
@@ -199,13 +200,13 @@ def main():
             pos_err = desired_pos - current_target_pos
             current_target_pos += torch.clamp(pos_err, -max_step_m, max_step_m)
 
-            # panda_hand +Z points out through the fingertips. At the identity
-            # quaternion those fingertips point world +Z (up). A half turn about X,
-            # (w, x, y, z) = (0, 1, 0, 0), sends +Z to world -Z, so the fingers
-            # point straight down. Yaw about world Z is applied on the left so the
-            # fingers stay vertical while the wrist turns toward the cube:
-            # q = q_z(yaw) * q_x(pi) = (0, cos(yaw/2), sin(yaw/2), 0).
-            yaw = torch.atan2(cube_pos[:, 1], cube_pos[:, 0])
+            # panda_hand +Z points out through the fingertips, and the fingers open
+            # along +Y. A half turn about X, (w, x, y, z) = (0, 1, 0, 0), points the
+            # fingertips down and lines the jaws up with the world axes. Yaw is the
+            # cube's own yaw, not the direction from the base to the cube, so the
+            # jaws stay parallel to the cube faces.
+            # q = q_z(cube_yaw) * q_x(pi) = (0, cos(yaw/2), sin(yaw/2), 0).
+            _, _, yaw = euler_xyz_from_quat(cube_quat_w)
             zeros = torch.zeros_like(yaw)
             down_quat = quat_from_euler_xyz(torch.full_like(yaw, math.pi), zeros, zeros)
             yaw_quat = quat_from_euler_xyz(zeros, zeros, yaw)
