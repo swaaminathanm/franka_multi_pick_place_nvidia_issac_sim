@@ -120,8 +120,13 @@ def main():
         current_target_pos = (body_pos_w[:, ee_body_idx] - direct_env.scene.env_origins).clone()
         current_target_quat = body_quat_w[:, ee_body_idx].clone()
 
-        # Natural vertical top-down grasp quaternion for Franka (w=0, x=1, y=0, z=0)
-        target_down_quat = torch.tensor([[0.0, 1.0, 0.0, 0.0]], device=device).repeat(num_envs, 1)
+        # Half-turn pitch around Y-axis to point fingers straight down into table (w=0, x=0, y=1, z=0)
+        target_down_quat = torch.tensor([[0.0, 0.0, 1.0, 0.0]], device=device).repeat(num_envs, 1)
+
+        print("=" * 60)
+        print(f"[DEBUG]: Hand start quat (w,x,y,z): {[round(x, 3) for x in body_quat_w[0, ee_body_idx].tolist()]}")
+        print(f"[DEBUG]: Target pitch-down quat:    [0.0, 0.0, 1.0, 0.0]")
+        print("=" * 60)
 
         # FSM State & dwell counters per environment
         states = torch.zeros(num_envs, dtype=torch.long, device=device)
