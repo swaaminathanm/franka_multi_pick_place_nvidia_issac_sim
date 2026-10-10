@@ -93,9 +93,9 @@ def main():
 
         print("=" * 60)
         print(f"[INFO]: Initializing Scripted IK Agent for {num_envs} envs on {device}")
-        # 1. Setup Differential IK Controller
+        # 1. Setup Differential IK Controller in position mode (pure 3D position tracking)
         ik_cfg = DifferentialIKControllerCfg(
-            command_type="pose",
+            command_type="position",
             use_relative_mode=False,
             ik_method="dls",
         )
@@ -113,11 +113,10 @@ def main():
         sim = direct_env.sim
         step = 0
 
-        # Read initial hand pose after reset (hand is in ready posture pointing down)
+        # Read initial hand pose after reset
         body_pos_w = to_torch(robot.data.body_pos_w)
         body_quat_w = to_torch(robot.data.body_quat_w)
 
-        ee_quat_down = body_quat_w[:, ee_body_idx].clone()
         current_target_pos = (body_pos_w[:, ee_body_idx] - direct_env.scene.env_origins).clone()
 
         # FSM State & dwell counters per environment
@@ -153,17 +152,16 @@ def main():
                 st = states[e].item()
 
                 if st == CubeTaskState.HOVER_CUBE:
-                    # Hover 12 cm above the cube with gripper open
+                    # Hover 20 cm above the cube (fingertip clearance ~10 cm)
                     desired_pos[e] = cube_pos[e].clone()
-                    desired_pos[e, 2] += 0.12
+                    desired_pos[e, 2] += 0.20
                     gripper_cmds[e] = 1.0
 
-                    if torch.norm(ee_pos[e] - desired_pos[e]) < 0.02:
+                    dist = torch.norm(ee_pos[e] - desired_pos[e])
+                    if dist < 0.03:
                         dwell_counters[e] += 1
                         if dwell_counters[e] % 30 == 1:
-                            print(f"[Env {e}] Arrived on top of cube -> Holding Hover")
-                        # Keep hovering on top of cube; other actions pass
-                        pass
+                            print(f"[Env {e}] Stable hover on top of cube | Z={ee_pos[e, 2]:.3f}m (dist: {dist*100:.1f}cm)")
 
                 elif st == CubeTaskState.DESCEND_CUBE:
                     pass
@@ -193,8 +191,7 @@ def main():
             # -------------------------------------------------------------
             # 5. Inverse Kinematics (IK) Calculation via Newton View & DifferentialIKController
             # -------------------------------------------------------------
-            target_pose_7d = torch.cat([current_target_pos, ee_quat_down], dim=-1)
-            ik_controller.set_command(target_pose_7d)
+            ik_controller.set_command(current_target_pos, ee_quat=ee_quat)
 
             # Newton geometric Jacobian for fixed-base articulation (fixed-root excluded):
             jacobi_ee_idx = ee_body_idx - 1
