@@ -93,9 +93,9 @@ def main():
 
         print("=" * 60)
         print(f"[INFO]: Initializing Scripted IK Agent for {num_envs} envs on {device}")
-        # 1. Setup Differential IK Controller in position mode (pure 3D position tracking)
+        # 1. Setup Differential IK Controller in pose mode (smooth 6D pose tracking)
         ik_cfg = DifferentialIKControllerCfg(
-            command_type="position",
+            command_type="pose",
             use_relative_mode=False,
             ik_method="dls",
         )
@@ -118,6 +118,10 @@ def main():
         body_quat_w = to_torch(robot.data.body_quat_w)
 
         current_target_pos = (body_pos_w[:, ee_body_idx] - direct_env.scene.env_origins).clone()
+        current_target_quat = body_quat_w[:, ee_body_idx].clone()
+
+        # Natural vertical top-down grasp quaternion for Franka (w=0, x=1, y=0, z=0)
+        target_down_quat = torch.tensor([[0.0, 1.0, 0.0, 0.0]], device=device).repeat(num_envs, 1)
 
         # FSM State & dwell counters per environment
         states = torch.zeros(num_envs, dtype=torch.long, device=device)
@@ -182,16 +186,23 @@ def main():
                     pass
 
             # -------------------------------------------------------------
-            # 4. Smooth Trajectory Interpolation (No violent jerking)
+            # 4. Smooth Trajectory & Orientation Interpolation
             # -------------------------------------------------------------
             max_step_m = 0.008  # ~0.48 m/s speed limit
             pos_err = desired_pos - current_target_pos
             current_target_pos += torch.clamp(pos_err, -max_step_m, max_step_m)
 
+            # Smoothly rotate wrist toward natural downward orientation (no angular jerking)
+            dot = torch.sum(current_target_quat * target_down_quat, dim=-1, keepdim=True)
+            aligned_down_quat = torch.where(dot < 0.0, -target_down_quat, target_down_quat)
+            current_target_quat = current_target_quat + 0.03 * (aligned_down_quat - current_target_quat)
+            current_target_quat = current_target_quat / torch.linalg.norm(current_target_quat, dim=-1, keepdim=True)
+
             # -------------------------------------------------------------
             # 5. Inverse Kinematics (IK) Calculation via Newton View & DifferentialIKController
             # -------------------------------------------------------------
-            ik_controller.set_command(current_target_pos, ee_quat=ee_quat)
+            target_pose_7d = torch.cat([current_target_pos, current_target_quat], dim=-1)
+            ik_controller.set_command(target_pose_7d)
 
             # Newton geometric Jacobian for fixed-base articulation (fixed-root excluded):
             jacobi_ee_idx = ee_body_idx - 1
@@ -215,10 +226,12 @@ def main():
             with torch.inference_mode():
                 obs, rew, terminated, truncated, info = env.step(actions)
 
-            # Auto-reset protection: re-sync target position & FSM if episode resets
+            # Auto-reset protection: re-sync target position & orientation if episode resets
             if terminated.any() or truncated.any():
                 body_pos_w = to_torch(robot.data.body_pos_w)
+                body_quat_w = to_torch(robot.data.body_quat_w)
                 current_target_pos = (body_pos_w[:, ee_body_idx] - direct_env.scene.env_origins).clone()
+                current_target_quat = body_quat_w[:, ee_body_idx].clone()
                 states[:] = CubeTaskState.HOVER_CUBE
                 dwell_counters[:] = 0
 
