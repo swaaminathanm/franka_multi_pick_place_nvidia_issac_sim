@@ -93,9 +93,9 @@ def main():
 
         print("=" * 60)
         print(f"[INFO]: Initializing Scripted IK Agent for {num_envs} envs on {device}")
-        # 1. Setup Differential IK Controller
+        # 1. Setup Differential IK Controller in position mode (smoothly track target xyz)
         ik_cfg = DifferentialIKControllerCfg(
-            command_type="pose",
+            command_type="position",
             use_relative_mode=False,
             ik_method="dls",
         )
@@ -143,46 +143,48 @@ def main():
             bin_pos = bin_pos_w - direct_env.scene.env_origins
 
             # -------------------------------------------------------------
-            # TEST MODE: Gripper Open / Close Test Only
-            # (Arm stays fixed at default pose, gripper toggles open / close every 60 steps)
+            # Target: Directly on top of the cube (+10 cm above cube)
             # -------------------------------------------------------------
-            arm_action = torch.zeros((num_envs, 7), device=device)
+            target_hover_pos = cube_pos.clone()
+            target_hover_pos[:, 2] += 0.10
 
-            # Alternate gripper: open (+1.0) for 60 steps, closed (-1.0) for 60 steps
-            cycle_steps = 60
-            is_open = ((step // cycle_steps) % 2) == 0
-            gripper_cmd_val = 1.0 if is_open else -1.0
-            gripper_cmds = torch.full((num_envs, 1), gripper_cmd_val, device=device)
+            # Smooth interpolation towards the hover target (no dynamic jerking)
+            max_step_m = 0.008  # ~0.48 m/s speed limit
+            pos_err = target_hover_pos - current_target_pos
+            current_target_pos += torch.clamp(pos_err, -max_step_m, max_step_m)
 
-            if step % cycle_steps == 0:
-                print(f"[Step {step:4d}] Command -> Gripper {'OPEN (+1.0)' if is_open else 'CLOSE (-1.0)'}")
+            # Set position command for Differential IK
+            ik_controller.set_command(current_target_pos, ee_quat=ee_quat)
 
-            # Combine arm actions (0-6) and gripper action (7)
+            # Newton geometric Jacobian for fixed-base Franka (fixed-root excluded):
+            jacobi_ee_idx = ee_body_idx - 1
+            jacobian = to_torch(robot.data.body_link_jacobian_w)[:, jacobi_ee_idx, :, arm_joint_indices]
+            current_arm_q = to_torch(robot.data.joint_pos)[:, arm_joint_indices]
+
+            # Solve joint targets via Newton Jacobian & DifferentialIK
+            q_des = ik_controller.compute(ee_pos, ee_quat, jacobian, current_arm_q)
+
+            # Convert to normalized 8D action in [-1, 1]
+            arm_action = (q_des - default_joint_pos) / arm_action_scale.unsqueeze(0)
+            arm_action = torch.clamp(arm_action, -1.0, 1.0)
+
+            # Gripper remains open (+1.0)
+            gripper_cmds = torch.ones((num_envs, 1), device=device)
             actions = torch.cat([arm_action, gripper_cmds], dim=-1)
-
-            # --- [COMMENTED OUT FOR GRIPPER-ONLY TEST] ---
-            # for e in range(num_envs):
-            #     st = states[e].item()
-            #     if st == CubeTaskState.HOVER_CUBE:
-            #         desired_pos[e] = cube_pos[e].clone(); desired_pos[e, 2] += 0.12
-            #         gripper_cmds[e] = 1.0
-            #         if torch.norm(ee_pos[e] - desired_pos[e]) < 0.02:
-            #             states[e] = CubeTaskState.DESCEND_CUBE
-            #     ...
-            # target_pose_7d = torch.cat([current_target_pos, ee_quat_down], dim=-1)
-            # ik_controller.set_command(target_pose_7d)
-            # jacobi_ee_idx = ee_body_idx - 1
-            # jacobian = to_torch(robot.data.body_link_jacobian_w)[:, jacobi_ee_idx, :, arm_joint_indices]
-            # current_arm_q = to_torch(robot.data.joint_pos)[:, arm_joint_indices]
-            # q_des = ik_controller.compute(ee_pos, ee_quat, jacobian, current_arm_q)
-            # arm_action = (q_des - default_joint_pos) / arm_action_scale.unsqueeze(0)
-            # arm_action = torch.clamp(arm_action, -1.0, 1.0)
-            # actions = torch.cat([arm_action, gripper_cmds], dim=-1)
-            # --- [END COMMENTED OUT] ---
 
             # Step environment
             with torch.inference_mode():
                 obs, rew, terminated, truncated, info = env.step(actions)
+
+            # On episode reset, re-sync target position to the robot's hand position
+            if terminated.any() or truncated.any():
+                body_pos_w = to_torch(robot.data.body_pos_w)
+                current_target_pos = (body_pos_w[:, ee_body_idx] - direct_env.scene.env_origins).clone()
+
+            # Progress printout every 20 steps
+            dist_to_hover = torch.norm(ee_pos[0] - target_hover_pos[0]).item()
+            if step % 20 == 0 or dist_to_hover < 0.02:
+                print(f"[Step {step:4d}] Hovering on cube | EE: ({ee_pos[0,0]:.3f}, {ee_pos[0,1]:.3f}, {ee_pos[0,2]:.3f}) | Target: ({target_hover_pos[0,0]:.3f}, {target_hover_pos[0,1]:.3f}, {target_hover_pos[0,2]:.3f}) | Dist: {dist_to_hover*100:.1f} cm")
 
             step += 1
             if not sim.visualizers and step >= args_cli.max_steps:
