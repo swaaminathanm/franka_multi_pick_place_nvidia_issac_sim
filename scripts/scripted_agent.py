@@ -150,24 +150,28 @@ def main():
             jaw_y[:, 1] = 1.0
             jaw_axis = quat_apply(ee_quat, jaw_y)
             jaws_aligned = (jaw_axis[:, 0].abs() > 0.95) | (jaw_axis[:, 1].abs() > 0.95)
+            grasp_offset = to_torch(direct_env.grasp_frame_offset).reshape(1, 3).to(device=device, dtype=ee_quat.dtype)
+            fingertip_w = quat_apply(ee_quat, grasp_offset.expand(num_envs, 3))
+            hover_pos = cube_pos.clone()
+            hover_pos[:, 2] += 0.20
+            descend_pos = cube_pos - fingertip_w
 
             # Gripper command buffer (+1.0 = open, -1.0 = closed)
             gripper_cmds = torch.ones((num_envs, 1), device=device)
             desired_pos = ee_pos.clone()
 
             # -------------------------------------------------------------
-            # Finite State Machine Logic (Hover implemented, others pass)
+            # Finite State Machine Logic (Hover through descend, later states pass)
             # -------------------------------------------------------------
             for e in range(num_envs):
                 st = states[e].item()
 
                 if st == CubeTaskState.HOVER_CUBE:
                     # Hover 20 cm above the cube (fingertip clearance ~10 cm)
-                    desired_pos[e] = cube_pos[e].clone()
-                    desired_pos[e, 2] += 0.20
+                    desired_pos[e] = hover_pos[e]
                     gripper_cmds[e] = 1.0
 
-                    dist = torch.norm(ee_pos[e] - desired_pos[e])
+                    dist = torch.norm(ee_pos[e] - hover_pos[e])
                     if dist < 0.03:
                         dwell_counters[e] += 1
                         if dwell_counters[e] == 30:
@@ -176,11 +180,9 @@ def main():
                             print(f"[Env {e}] Hover settled, aligning gripper")
 
                 elif st == CubeTaskState.ALIGN_CUBE:
-                    desired_pos[e] = cube_pos[e].clone()
-                    desired_pos[e, 2] += 0.20
                     gripper_cmds[e] = 1.0
 
-                    dist = torch.norm(ee_pos[e] - desired_pos[e])
+                    dist = torch.norm(ee_pos[e] - hover_pos[e])
                     if dist < 0.04 and finger_z[e] < -0.95 and jaws_aligned[e]:
                         dwell_counters[e] += 1
                         if dwell_counters[e] == 20:
@@ -191,7 +193,17 @@ def main():
                         dwell_counters[e] = 0
 
                 elif st == CubeTaskState.DESCEND_CUBE:
-                    pass
+                    gripper_cmds[e] = 1.0
+
+                    dist = torch.norm(ee_pos[e] - descend_pos[e])
+                    if dist < 0.02 and finger_z[e] < -0.95 and jaws_aligned[e]:
+                        dwell_counters[e] += 1
+                        if dwell_counters[e] == 15:
+                            states[e] = CubeTaskState.GRASP_CUBE
+                            dwell_counters[e] = 0
+                            print(f"[Env {e}] Fingertips at the cube")
+                    else:
+                        dwell_counters[e] = 0
 
                 elif st == CubeTaskState.GRASP_CUBE:
                     pass
@@ -208,24 +220,32 @@ def main():
                 elif st == CubeTaskState.DONE:
                     pass
 
-            # -------------------------------------------------------------
-            # Smooth position. Orientation is Euler degrees, then converted.
-            # -------------------------------------------------------------
             max_step_m = 0.008  # ~0.48 m/s speed limit
-            pos_err = desired_pos - current_target_pos
-            current_target_pos += torch.clamp(pos_err, -max_step_m, max_step_m)
-
-            aligning = states == CubeTaskState.ALIGN_CUBE
             roll = torch.full((num_envs,), math.radians(180.0), device=device)
             pitch = torch.zeros(num_envs, device=device)
             yaw = torch.zeros(num_envs, device=device)
             down_quat = quat_from_euler_xyz(roll, pitch, yaw)
-            goal_quat = torch.where(aligning.unsqueeze(-1), down_quat, ee_quat)
-            dot = torch.sum(current_target_quat * goal_quat, dim=-1, keepdim=True)
-            goal_quat = torch.where(dot < 0.0, -goal_quat, goal_quat)
-            blend = torch.where(aligning.unsqueeze(-1), 0.04, 1.0)
-            current_target_quat = (1.0 - blend) * current_target_quat + blend * goal_quat
-            current_target_quat = current_target_quat / torch.norm(current_target_quat, dim=-1, keepdim=True)
+            dot = torch.sum(current_target_quat * down_quat, dim=-1, keepdim=True)
+            down_quat = torch.where(dot < 0.0, -down_quat, down_quat)
+
+            aligning = states == CubeTaskState.ALIGN_CUBE
+            if aligning.any():
+                pos_err = hover_pos - current_target_pos
+                current_target_pos[aligning] += torch.clamp(pos_err[aligning], -max_step_m, max_step_m)
+                blended = (1.0 - 0.04) * current_target_quat + 0.04 * down_quat
+                blended = blended / torch.norm(blended, dim=-1, keepdim=True)
+                current_target_quat[aligning] = blended[aligning]
+
+            descending = states == CubeTaskState.DESCEND_CUBE
+            if descending.any():
+                pos_err = descend_pos - current_target_pos
+                current_target_pos[descending] += torch.clamp(pos_err[descending], -max_step_m, max_step_m)
+                current_target_quat[descending] = down_quat[descending]
+
+            holding = ~(aligning | descending)
+            if holding.any():
+                pos_err = desired_pos - current_target_pos
+                current_target_pos[holding] += torch.clamp(pos_err[holding], -max_step_m, max_step_m)
 
             # -------------------------------------------------------------
             # Pose IK. The quaternion is only the converted Euler angle.
