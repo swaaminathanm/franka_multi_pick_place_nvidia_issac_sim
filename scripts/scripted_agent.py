@@ -7,6 +7,7 @@
 
 import argparse
 import contextlib
+import math
 import sys
 from enum import IntEnum
 
@@ -29,6 +30,7 @@ except ImportError:
     from isaaclab_tasks.utils.preset_cli import setup_preset_cli
 
 from isaaclab.controllers import DifferentialIKController, DifferentialIKControllerCfg
+from isaaclab.utils.math import quat_apply, quat_from_euler_xyz, quat_mul
 
 # Import custom task to register environment with Gymnasium
 import franka_multi_pick_place.tasks  # noqa: F401
@@ -162,7 +164,15 @@ def main():
                     if dist < 0.03:
                         dwell_counters[e] += 1
                         if dwell_counters[e] % 30 == 1:
-                            print(f"[Env {e}] Stable hover on top of cube | Z={ee_pos[e, 2]:.3f}m (dist: {dist*100:.1f}cm)")
+                            finger_axis = quat_apply(
+                                ee_quat[e],
+                                torch.tensor([0.0, 0.0, 1.0], device=device, dtype=ee_quat.dtype),
+                            )
+                            print(
+                                f"[Env {e}] Stable hover on top of cube | Z={ee_pos[e, 2]:.3f}m "
+                                f"(dist: {dist*100:.1f}cm) finger axis=({finger_axis[0]:.2f}, "
+                                f"{finger_axis[1]:.2f}, {finger_axis[2]:.2f})"
+                            )
 
                 elif st == CubeTaskState.DESCEND_CUBE:
                     pass
@@ -189,12 +199,17 @@ def main():
             pos_err = desired_pos - current_target_pos
             current_target_pos += torch.clamp(pos_err, -max_step_m, max_step_m)
 
-            # Compute yaw angle facing the cube so wrist pitch aligns naturally
+            # panda_hand +Z points out through the fingertips. At the identity
+            # quaternion those fingertips point world +Z (up). A half turn about X,
+            # (w, x, y, z) = (0, 1, 0, 0), sends +Z to world -Z, so the fingers
+            # point straight down. Yaw about world Z is applied on the left so the
+            # fingers stay vertical while the wrist turns toward the cube:
+            # q = q_z(yaw) * q_x(pi) = (0, cos(yaw/2), sin(yaw/2), 0).
             yaw = torch.atan2(cube_pos[:, 1], cube_pos[:, 0])
-            sy = torch.sin(yaw * 0.5)
-            cy = torch.cos(yaw * 0.5)
-            # Downward-pointing quaternion rotated by yaw: [w, x, y, z] = [0, -sin(yaw/2), cos(yaw/2), 0]
-            target_down_quat = torch.stack([torch.zeros_like(sy), -sy, cy, torch.zeros_like(sy)], dim=-1)
+            zeros = torch.zeros_like(yaw)
+            down_quat = quat_from_euler_xyz(torch.full_like(yaw, math.pi), zeros, zeros)
+            yaw_quat = quat_from_euler_xyz(zeros, zeros, yaw)
+            target_down_quat = quat_mul(yaw_quat, down_quat)
 
             # Shortest-path sign alignment and smooth NLERP
             dot = torch.sum(current_target_quat * target_down_quat, dim=-1, keepdim=True)
