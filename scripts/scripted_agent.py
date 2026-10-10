@@ -142,117 +142,43 @@ def main():
             cube_pos = cube_pos_w - direct_env.scene.env_origins
             bin_pos = bin_pos_w - direct_env.scene.env_origins
 
-            # Gripper command buffer (+1.0 = open, -1.0 = closed)
-            gripper_cmds = torch.ones((num_envs, 1), device=device)
-            desired_pos = ee_pos.clone()
-
             # -------------------------------------------------------------
-            # 3. Finite State Machine Logic
+            # TEST MODE: Gripper Open / Close Test Only
+            # (Arm stays fixed at default pose, gripper toggles open / close every 60 steps)
             # -------------------------------------------------------------
-            for e in range(num_envs):
-                st = states[e].item()
+            arm_action = torch.zeros((num_envs, 7), device=device)
 
-                if st == CubeTaskState.HOVER_CUBE:
-                    # Hover 12 cm above the cube with gripper open
-                    desired_pos[e] = cube_pos[e].clone()
-                    desired_pos[e, 2] += 0.12
-                    gripper_cmds[e] = 1.0
+            # Alternate gripper: open (+1.0) for 60 steps, closed (-1.0) for 60 steps
+            cycle_steps = 60
+            is_open = ((step // cycle_steps) % 2) == 0
+            gripper_cmd_val = 1.0 if is_open else -1.0
+            gripper_cmds = torch.full((num_envs, 1), gripper_cmd_val, device=device)
 
-                    if torch.norm(ee_pos[e] - desired_pos[e]) < 0.02:
-                        states[e] = CubeTaskState.DESCEND_CUBE
-                        print(f"[Env {e}] Arrived at Hover -> DESCENDING")
-
-                elif st == CubeTaskState.DESCEND_CUBE:
-                    # Lower down to grasp height (z ≈ 0.035 m)
-                    desired_pos[e] = cube_pos[e].clone()
-                    desired_pos[e, 2] = 0.035
-                    gripper_cmds[e] = 1.0
-
-                    if torch.norm(ee_pos[e] - desired_pos[e]) < 0.015:
-                        states[e] = CubeTaskState.GRASP_CUBE
-                        dwell_counters[e] = 0
-                        print(f"[Env {e}] At grasp height -> CLOSING GRIPPER")
-
-                elif st == CubeTaskState.GRASP_CUBE:
-                    # Hold position and clamp gripper for 20 steps
-                    desired_pos[e] = cube_pos[e].clone()
-                    desired_pos[e, 2] = 0.035
-                    gripper_cmds[e] = -1.0
-                    dwell_counters[e] += 1
-
-                    if dwell_counters[e] >= 20:
-                        states[e] = CubeTaskState.LIFT_CUBE
-                        print(f"[Env {e}] Grasp tight -> LIFTING")
-
-                elif st == CubeTaskState.LIFT_CUBE:
-                    # Lift high to clear the bin lip
-                    desired_pos[e] = cube_pos[e].clone()
-                    desired_pos[e, 2] = 0.32
-                    gripper_cmds[e] = -1.0
-
-                    if ee_pos[e, 2] >= 0.28:
-                        states[e] = CubeTaskState.CARRY_TO_BIN
-                        print(f"[Env {e}] Lifted -> CARRYING TO BIN")
-
-                elif st == CubeTaskState.CARRY_TO_BIN:
-                    # Travel horizontally to bin center
-                    desired_pos[e] = bin_pos[e].clone()
-                    desired_pos[e, 2] = 0.32
-                    gripper_cmds[e] = -1.0
-
-                    dist_to_bin = torch.norm(ee_pos[e, :2] - bin_pos[e, :2])
-                    if dist_to_bin < 0.04:
-                        states[e] = CubeTaskState.RELEASE_CUBE
-                        dwell_counters[e] = 0
-                        print(f"[Env {e}] Above bin -> RELEASING CUBE")
-
-                elif st == CubeTaskState.RELEASE_CUBE:
-                    # Open gripper and hold for 20 steps to let cube fall
-                    desired_pos[e] = bin_pos[e].clone()
-                    desired_pos[e, 2] = 0.32
-                    gripper_cmds[e] = 1.0
-                    dwell_counters[e] += 1
-
-                    if dwell_counters[e] >= 20:
-                        states[e] = CubeTaskState.DONE
-                        print(f"[Env {e}] SUCCESS! Cube successfully dropped in bin.")
-
-                elif st == CubeTaskState.DONE:
-                    # Hold above bin
-                    desired_pos[e] = bin_pos[e].clone()
-                    desired_pos[e, 2] = 0.32
-                    gripper_cmds[e] = 1.0
-
-            # -------------------------------------------------------------
-            # 4. Smooth Trajectory Interpolation (No violent jerking)
-            # -------------------------------------------------------------
-            max_step_m = 0.008  # ~0.48 m/s speed limit
-            pos_err = desired_pos - current_target_pos
-            current_target_pos += torch.clamp(pos_err, -max_step_m, max_step_m)
-
-            # -------------------------------------------------------------
-            # 5. Inverse Kinematics (IK) Calculation via Newton View & DifferentialIKController
-            # -------------------------------------------------------------
-            target_pose_7d = torch.cat([current_target_pos, ee_quat_down], dim=-1)
-            ik_controller.set_command(target_pose_7d)
-
-            # Newton geometric Jacobian for fixed-base articulation (fixed-root excluded):
-            jacobi_ee_idx = ee_body_idx - 1
-            jacobian = to_torch(robot.data.body_link_jacobian_w)[:, jacobi_ee_idx, :, arm_joint_indices]
-
-            current_arm_q = to_torch(robot.data.joint_pos)[:, arm_joint_indices]
-
-            q_des = ik_controller.compute(ee_pos, ee_quat, jacobian, current_arm_q)
-
-            # -------------------------------------------------------------
-            # 6. Convert Joint Angles into Normalized 8D Action [-1, 1]
-            # -------------------------------------------------------------
-            # Formula: a_i = (q_des - q_default) / action_scale
-            arm_action = (q_des - default_joint_pos) / arm_action_scale.unsqueeze(0)
-            arm_action = torch.clamp(arm_action, -1.0, 1.0)
+            if step % cycle_steps == 0:
+                print(f"[Step {step:4d}] Command -> Gripper {'OPEN (+1.0)' if is_open else 'CLOSE (-1.0)'}")
 
             # Combine arm actions (0-6) and gripper action (7)
             actions = torch.cat([arm_action, gripper_cmds], dim=-1)
+
+            # --- [COMMENTED OUT FOR GRIPPER-ONLY TEST] ---
+            # for e in range(num_envs):
+            #     st = states[e].item()
+            #     if st == CubeTaskState.HOVER_CUBE:
+            #         desired_pos[e] = cube_pos[e].clone(); desired_pos[e, 2] += 0.12
+            #         gripper_cmds[e] = 1.0
+            #         if torch.norm(ee_pos[e] - desired_pos[e]) < 0.02:
+            #             states[e] = CubeTaskState.DESCEND_CUBE
+            #     ...
+            # target_pose_7d = torch.cat([current_target_pos, ee_quat_down], dim=-1)
+            # ik_controller.set_command(target_pose_7d)
+            # jacobi_ee_idx = ee_body_idx - 1
+            # jacobian = to_torch(robot.data.body_link_jacobian_w)[:, jacobi_ee_idx, :, arm_joint_indices]
+            # current_arm_q = to_torch(robot.data.joint_pos)[:, arm_joint_indices]
+            # q_des = ik_controller.compute(ee_pos, ee_quat, jacobian, current_arm_q)
+            # arm_action = (q_des - default_joint_pos) / arm_action_scale.unsqueeze(0)
+            # arm_action = torch.clamp(arm_action, -1.0, 1.0)
+            # actions = torch.cat([arm_action, gripper_cmds], dim=-1)
+            # --- [END COMMENTED OUT] ---
 
             # Step environment
             with torch.inference_mode():
