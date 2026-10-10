@@ -151,12 +151,14 @@ def main():
             jaw_axis = quat_apply(ee_quat, jaw_y)
             jaws_aligned = (jaw_axis[:, 0].abs() > 0.95) | (jaw_axis[:, 1].abs() > 0.95)
             grasp_offset = to_torch(direct_env.grasp_frame_offset).reshape(1, 3).to(device=device, dtype=ee_quat.dtype)
-            # Height only. A tilted hand quaternion would otherwise shift the goal sideways off the cube.
-            fingertip_z = grasp_offset[0, 2]
+            tip_offset_w = quat_apply(ee_quat, grasp_offset.expand(num_envs, 3))
+            fingertip_pos = ee_pos + tip_offset_w
             hover_pos = cube_pos.clone()
             hover_pos[:, 2] += 0.20
-            descend_pos = cube_pos.clone()
-            descend_pos[:, 2] += fingertip_z
+            # Shift the hand so the fingertips, not the palm origin, sit on the cube's X and Y.
+            align_pos = hover_pos.clone()
+            align_pos[:, :2] = cube_pos[:, :2] - tip_offset_w[:, :2]
+            descend_pos = cube_pos - tip_offset_w
 
             # Gripper command buffer (+1.0 = open, -1.0 = closed)
             gripper_cmds = torch.ones((num_envs, 1), device=device)
@@ -182,8 +184,8 @@ def main():
                 elif st == CubeTaskState.ALIGN_CUBE:
                     gripper_cmds[e] = 1.0
 
-                    dist = torch.norm(ee_pos[e] - hover_pos[e])
-                    if dist < 0.04 and finger_z[e] < -0.95 and jaws_aligned[e]:
+                    tip_xy = torch.norm(fingertip_pos[e, :2] - cube_pos[e, :2])
+                    if tip_xy < 0.01 and finger_z[e] < -0.95 and jaws_aligned[e]:
                         dwell_counters[e] += 1
                         if dwell_counters[e] == 20:
                             states[e] = CubeTaskState.DESCEND_CUBE
@@ -237,7 +239,7 @@ def main():
 
             aligning = states == CubeTaskState.ALIGN_CUBE
             if aligning.any():
-                pos_err = hover_pos - current_target_pos
+                pos_err = align_pos - current_target_pos
                 current_target_pos[aligning] += torch.clamp(pos_err[aligning], -max_step_m, max_step_m)
                 blended = (1.0 - 0.04) * current_target_quat + 0.04 * down_quat
                 blended = blended / torch.norm(blended, dim=-1, keepdim=True)
