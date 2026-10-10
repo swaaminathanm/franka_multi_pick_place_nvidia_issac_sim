@@ -97,27 +97,34 @@ def main():
         )
         ik_controller = DifferentialIKController(cfg=ik_cfg, num_envs=num_envs, device=device)
 
+        # Helper to unwrap Warp buffers to PyTorch
+        def to_torch(data):
+            if hasattr(data, "torch"):
+                return data.torch
+            return data
+
         # Cache robot constants
         robot = direct_env.robot
         arm_joint_indices = direct_env.arm_joint_indices
-        arm_action_scale = direct_env.arm_action_scale  # shape: [7]
-        default_joint_pos = direct_env.robot_default_joint_pos[:, arm_joint_indices]  # [num_envs, 7]
+        arm_action_scale = to_torch(direct_env.arm_action_scale)  # shape: [7]
+        default_joint_pos = to_torch(direct_env.robot_default_joint_pos)[:, arm_joint_indices]  # [num_envs, 7]
         ee_body_idx = direct_env.ee_body_idx
 
-        # Fixed gripper pointing straight down (read from default home pose)
-        ee_quat_down = robot.data.default_body_quat_w[:, ee_body_idx].clone()
-
-        # FSM State & dwell counters per environment
-        states = torch.zeros(num_envs, dtype=torch.long, device=device)
-        dwell_counters = torch.zeros(num_envs, dtype=torch.long, device=device)
-
-        # Reset environment
+        # Reset environment first so physics states and buffers are fully initialized
         obs, _ = env.reset()
         sim = direct_env.sim
         step = 0
 
-        # Current interpolated target position (starts at initial hand position)
-        current_target_pos = (robot.data.body_pos_w[:, ee_body_idx] - direct_env.scene.env_origins).clone()
+        # Read initial hand pose after reset (hand is in ready posture pointing down)
+        body_pos_w = to_torch(robot.data.body_pos_w)
+        body_quat_w = to_torch(robot.data.body_quat_w)
+
+        ee_quat_down = body_quat_w[:, ee_body_idx].clone()
+        current_target_pos = (body_pos_w[:, ee_body_idx] - direct_env.scene.env_origins).clone()
+
+        # FSM State & dwell counters per environment
+        states = torch.zeros(num_envs, dtype=torch.long, device=device)
+        dwell_counters = torch.zeros(num_envs, dtype=torch.long, device=device)
 
         print("[INFO]: Starting Scripted Agent stepping loop...")
         while True:
@@ -127,10 +134,15 @@ def main():
             # -------------------------------------------------------------
             # 2. Read Ground Truth Positions from Simulator
             # -------------------------------------------------------------
-            ee_pos = robot.data.body_pos_w[:, ee_body_idx] - direct_env.scene.env_origins
-            ee_quat = robot.data.body_quat_w[:, ee_body_idx]
-            cube_pos = direct_env.cube.data.root_pos_w - direct_env.scene.env_origins
-            bin_pos = direct_env.bin.data.root_pos_w - direct_env.scene.env_origins
+            body_pos_w = to_torch(robot.data.body_pos_w)
+            body_quat_w = to_torch(robot.data.body_quat_w)
+            cube_pos_w = to_torch(direct_env.cube.data.root_pos_w)
+            bin_pos_w = to_torch(direct_env.bin.data.root_pos_w)
+
+            ee_pos = body_pos_w[:, ee_body_idx] - direct_env.scene.env_origins
+            ee_quat = body_quat_w[:, ee_body_idx]
+            cube_pos = cube_pos_w - direct_env.scene.env_origins
+            bin_pos = bin_pos_w - direct_env.scene.env_origins
 
             # Gripper command buffer (+1.0 = open, -1.0 = closed)
             gripper_cmds = torch.ones((num_envs, 1), device=device)
@@ -227,8 +239,9 @@ def main():
             ik_controller.set_command(target_pose_7d)
 
             # Retrieve Jacobian for panda_hand
-            jacobian = robot.root_physx_view.get_jacobians()[:, ee_body_idx, :, arm_joint_indices]
-            current_arm_q = robot.data.joint_pos[:, arm_joint_indices]
+            raw_jacobian = to_torch(robot.root_physx_view.get_jacobians())
+            jacobian = raw_jacobian[:, ee_body_idx, :, arm_joint_indices]
+            current_arm_q = to_torch(robot.data.joint_pos)[:, arm_joint_indices]
 
             # Solve desired joint angles
             q_des = ik_controller.compute(ee_pos, ee_quat, jacobian, current_arm_q)
