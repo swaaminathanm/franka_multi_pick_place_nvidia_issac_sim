@@ -7,6 +7,7 @@
 
 import argparse
 import contextlib
+import math
 import sys
 from enum import IntEnum
 
@@ -29,6 +30,7 @@ except ImportError:
     from isaaclab_tasks.utils.preset_cli import setup_preset_cli
 
 from isaaclab.controllers import DifferentialIKController, DifferentialIKControllerCfg
+from isaaclab.utils.math import quat_apply, quat_from_euler_xyz
 
 # Import custom task to register environment with Gymnasium
 import franka_multi_pick_place.tasks  # noqa: F401
@@ -43,12 +45,13 @@ def to_torch(data):
 class CubeTaskState(IntEnum):
     """Finite State Machine states for Milestone 1 (Cube only)."""
     HOVER_CUBE = 0
-    DESCEND_CUBE = 1
-    GRASP_CUBE = 2
-    LIFT_CUBE = 3
-    CARRY_TO_BIN = 4
-    RELEASE_CUBE = 5
-    DONE = 6
+    ALIGN_CUBE = 1
+    DESCEND_CUBE = 2
+    GRASP_CUBE = 3
+    LIFT_CUBE = 4
+    CARRY_TO_BIN = 5
+    RELEASE_CUBE = 6
+    DONE = 7
 
 
 # Add CLI arguments
@@ -93,9 +96,10 @@ def main():
 
         print("=" * 60)
         print(f"[INFO]: Initializing Scripted IK Agent for {num_envs} envs on {device}")
-        # Position only. The command is (x, y, z); orientation is left alone.
+        # Pose command is position plus a quaternion. Hover keeps the current
+        # orientation. ALIGN_CUBE replaces it with an Euler angle converted below.
         ik_cfg = DifferentialIKControllerCfg(
-            command_type="position",
+            command_type="pose",
             use_relative_mode=False,
             ik_method="dls",
         )
@@ -113,9 +117,11 @@ def main():
         sim = direct_env.sim
         step = 0
 
-        # Read initial hand position after reset
+        # Read initial hand pose after reset
         body_pos_w = to_torch(robot.data.body_pos_w)
+        body_quat_w = to_torch(robot.data.body_quat_w)
         current_target_pos = (body_pos_w[:, ee_body_idx] - direct_env.scene.env_origins).clone()
+        current_target_quat = body_quat_w[:, ee_body_idx].clone()
 
         # FSM State & dwell counters per environment
         states = torch.zeros(num_envs, dtype=torch.long, device=device)
@@ -127,7 +133,7 @@ def main():
                 break
 
             # -------------------------------------------------------------
-            # 2. Read Ground Truth Positions from Simulator
+            # Read Ground Truth Positions from Simulator
             # -------------------------------------------------------------
             body_pos_w = to_torch(robot.data.body_pos_w)
             body_quat_w = to_torch(robot.data.body_quat_w)
@@ -136,13 +142,16 @@ def main():
             ee_pos = body_pos_w[:, ee_body_idx] - direct_env.scene.env_origins
             ee_quat = body_quat_w[:, ee_body_idx]
             cube_pos = cube_pos_w - direct_env.scene.env_origins
+            hand_z = torch.zeros(num_envs, 3, device=device, dtype=ee_quat.dtype)
+            hand_z[:, 2] = 1.0
+            finger_z = quat_apply(ee_quat, hand_z)[:, 2]
 
             # Gripper command buffer (+1.0 = open, -1.0 = closed)
             gripper_cmds = torch.ones((num_envs, 1), device=device)
             desired_pos = ee_pos.clone()
 
             # -------------------------------------------------------------
-            # 3. Finite State Machine Logic (Hover implemented, others pass)
+            # Finite State Machine Logic (Hover implemented, others pass)
             # -------------------------------------------------------------
             for e in range(num_envs):
                 st = states[e].item()
@@ -156,11 +165,25 @@ def main():
                     dist = torch.norm(ee_pos[e] - desired_pos[e])
                     if dist < 0.03:
                         dwell_counters[e] += 1
-                        if dwell_counters[e] % 30 == 1:
-                            print(
-                                f"[Env {e}] Stable hover on top of cube | Z={ee_pos[e, 2]:.3f}m "
-                                f"(dist: {dist * 100:.1f}cm)"
-                            )
+                        if dwell_counters[e] == 30:
+                            states[e] = CubeTaskState.ALIGN_CUBE
+                            dwell_counters[e] = 0
+                            print(f"[Env {e}] Hover settled, aligning gripper")
+
+                elif st == CubeTaskState.ALIGN_CUBE:
+                    desired_pos[e] = cube_pos[e].clone()
+                    desired_pos[e, 2] += 0.20
+                    gripper_cmds[e] = 1.0
+
+                    dist = torch.norm(ee_pos[e] - desired_pos[e])
+                    if dist < 0.04 and finger_z[e] < -0.95:
+                        dwell_counters[e] += 1
+                        if dwell_counters[e] == 20:
+                            states[e] = CubeTaskState.DESCEND_CUBE
+                            dwell_counters[e] = 0
+                            print(f"[Env {e}] Gripper aligned, fingertips down")
+                    else:
+                        dwell_counters[e] = 0
 
                 elif st == CubeTaskState.DESCEND_CUBE:
                     pass
@@ -181,17 +204,31 @@ def main():
                     pass
 
             # -------------------------------------------------------------
-            # 4. Smooth the position target. Orientation is not commanded.
+            # Smooth position. Orientation is Euler degrees, then converted.
             # -------------------------------------------------------------
             max_step_m = 0.008  # ~0.48 m/s speed limit
             pos_err = desired_pos - current_target_pos
             current_target_pos += torch.clamp(pos_err, -max_step_m, max_step_m)
 
+            # Roll 180 lays the fingertips down. Pitch 0 keeps them vertical.
+            # Yaw 0 puts the jaws on two opposite faces. Yaw 90 is the other pair.
+            # Yaw 45 is the diagonal.
+            aligning = states == CubeTaskState.ALIGN_CUBE
+            roll = torch.full((num_envs,), math.radians(180.0), device=device)
+            pitch = torch.zeros(num_envs, device=device)
+            yaw = torch.zeros(num_envs, device=device)
+            down_quat = quat_from_euler_xyz(roll, pitch, yaw)
+            goal_quat = torch.where(aligning.unsqueeze(-1), down_quat, ee_quat)
+            dot = torch.sum(current_target_quat * goal_quat, dim=-1, keepdim=True)
+            goal_quat = torch.where(dot < 0.0, -goal_quat, goal_quat)
+            blend = torch.where(aligning.unsqueeze(-1), 0.04, 1.0)
+            current_target_quat = (1.0 - blend) * current_target_quat + blend * goal_quat
+            current_target_quat = current_target_quat / torch.norm(current_target_quat, dim=-1, keepdim=True)
+
             # -------------------------------------------------------------
-            # 5. Position IK. Only the top 3 Jacobian rows (linear velocity) are used.
+            # Pose IK. The quaternion is only the converted Euler angle.
             # -------------------------------------------------------------
-            # Position mode still asks for the current quaternion, but does not track it.
-            ik_controller.set_command(current_target_pos, ee_quat=ee_quat)
+            ik_controller.set_command(torch.cat([current_target_pos, current_target_quat], dim=-1))
 
             # Newton geometric Jacobian for fixed-base articulation (fixed-root excluded):
             jacobi_ee_idx = ee_body_idx - 1
@@ -201,7 +238,7 @@ def main():
             q_des = ik_controller.compute(ee_pos, ee_quat, jacobian, current_arm_q)
 
             # -------------------------------------------------------------
-            # 6. Convert Joint Angles into Normalized 8D Action [-1, 1]
+            # Convert Joint Angles into Normalized 8D Action [-1, 1]
             # -------------------------------------------------------------
             arm_action = (q_des - default_joint_pos) / arm_action_scale.unsqueeze(0)
             arm_action = torch.clamp(arm_action, -1.0, 1.0)
@@ -216,7 +253,9 @@ def main():
             # Auto-reset protection: re-sync the position target if the episode resets
             if terminated.any() or truncated.any():
                 body_pos_w = to_torch(robot.data.body_pos_w)
+                body_quat_w = to_torch(robot.data.body_quat_w)
                 current_target_pos = (body_pos_w[:, ee_body_idx] - direct_env.scene.env_origins).clone()
+                current_target_quat = body_quat_w[:, ee_body_idx].clone()
                 states[:] = CubeTaskState.HOVER_CUBE
                 dwell_counters[:] = 0
 
