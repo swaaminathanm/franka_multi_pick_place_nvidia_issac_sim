@@ -152,8 +152,7 @@ def main():
             jaws_aligned = (jaw_axis[:, 0].abs() > 0.95) | (jaw_axis[:, 1].abs() > 0.95)
             grasp_offset = to_torch(direct_env.grasp_frame_offset).reshape(1, 3).to(device=device, dtype=ee_quat.dtype)
             fingertip_pos = ee_pos + quat_apply(ee_quat, grasp_offset.expand(num_envs, 3))
-            # Downward pose. Its fingertip offset is straight down, so the palm
-            # sits on the cube's X and Y and the fingers hang through the center.
+            tip_err_xy = cube_pos[:, :2] - fingertip_pos[:, :2]
             roll = torch.full((num_envs,), math.radians(180.0), device=device)
             pitch = torch.zeros(num_envs, device=device)
             yaw = torch.zeros(num_envs, device=device)
@@ -161,9 +160,6 @@ def main():
             down_tip_w = quat_apply(down_quat, grasp_offset.expand(num_envs, 3))
             hover_pos = cube_pos.clone()
             hover_pos[:, 2] += 0.20
-            align_pos = cube_pos - down_tip_w
-            align_pos[:, 2] = hover_pos[:, 2]
-            descend_pos = cube_pos - down_tip_w
 
             # Gripper command buffer (+1.0 = open, -1.0 = closed)
             gripper_cmds = torch.ones((num_envs, 1), device=device)
@@ -202,7 +198,7 @@ def main():
                 elif st == CubeTaskState.DESCEND_CUBE:
                     gripper_cmds[e] = 1.0
 
-                    dist = torch.norm(ee_pos[e] - descend_pos[e])
+                    dist = torch.norm(fingertip_pos[e] - cube_pos[e])
                     if dist < 0.02 and finger_z[e] < -0.95 and jaws_aligned[e]:
                         dwell_counters[e] += 1
                         if dwell_counters[e] == 15:
@@ -227,30 +223,27 @@ def main():
                 elif st == CubeTaskState.DONE:
                     pass
 
+            # One position goal and one quaternion goal. Hover goes to a point.
+            # Align and descend add the fingertip miss so the fingers walk onto the cube.
+            hovering = states == CubeTaskState.HOVER_CUBE
+            aligning = states == CubeTaskState.ALIGN_CUBE
+            descending = states == CubeTaskState.DESCEND_CUBE
+            pos_goal = current_target_pos.clone()
+            pos_goal[hovering] = hover_pos[hovering]
+            centering = aligning | descending
+            pos_goal[centering, :2] = current_target_pos[centering, :2] + tip_err_xy[centering]
+            pos_goal[aligning, 2] = hover_pos[aligning, 2]
+            pos_goal[descending, 2] = (cube_pos[:, 2] - down_tip_w[:, 2])[descending]
             max_step_m = 0.008  # ~0.48 m/s speed limit
+            current_target_pos += torch.clamp(pos_goal - current_target_pos, -max_step_m, max_step_m)
+
             dot = torch.sum(current_target_quat * down_quat, dim=-1, keepdim=True)
             down_quat = torch.where(dot < 0.0, -down_quat, down_quat)
-
-            hovering = states == CubeTaskState.HOVER_CUBE
-            if hovering.any():
-                pos_err = hover_pos - current_target_pos
-                current_target_pos[hovering] += torch.clamp(pos_err[hovering], -max_step_m, max_step_m)
-                # Track the measured orientation so the pose IK only has to reach the point.
-                current_target_quat[hovering] = ee_quat[hovering]
-
-            aligning = states == CubeTaskState.ALIGN_CUBE
-            if aligning.any():
-                pos_err = align_pos - current_target_pos
-                current_target_pos[aligning] += torch.clamp(pos_err[aligning], -max_step_m, max_step_m)
-                blended = (1.0 - 0.04) * current_target_quat + 0.04 * down_quat
-                blended = blended / torch.norm(blended, dim=-1, keepdim=True)
-                current_target_quat[aligning] = blended[aligning]
-
-            descending = states == CubeTaskState.DESCEND_CUBE
-            if descending.any():
-                pos_err = descend_pos - current_target_pos
-                current_target_pos[descending] += torch.clamp(pos_err[descending], -max_step_m, max_step_m)
-                current_target_quat[descending] = down_quat[descending]
+            current_target_quat[hovering] = ee_quat[hovering]
+            blended = (1.0 - 0.04) * current_target_quat + 0.04 * down_quat
+            blended = blended / torch.norm(blended, dim=-1, keepdim=True)
+            current_target_quat[aligning] = blended[aligning]
+            current_target_quat[descending] = down_quat[descending]
 
             # -------------------------------------------------------------
             # Pose IK. The quaternion is only the converted Euler angle.
