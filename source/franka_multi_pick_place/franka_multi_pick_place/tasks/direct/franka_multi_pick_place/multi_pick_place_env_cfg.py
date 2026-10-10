@@ -134,7 +134,7 @@ class FrankaMultiSceneCfg(InteractiveSceneCfg):
     cube: RigidObjectCfg = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/cube",
         init_state=RigidObjectCfg.InitialStateCfg(
-            pos=[0.29, 0.0, 0.02],
+            pos=[0.42, 0.0, 0.02],
             rot=[1.0, 0.0, 0.0, 0.0],
         ),
         spawn=sim_utils.CuboidCfg(
@@ -286,11 +286,11 @@ class FrankaMultiPickPlaceEnvCfg(DirectRLEnvCfg):
     action_scale: tuple[float, ...] = (1.10, 1.60, 0.70, 2.70, 0.45, 0.80, 0.30)
     newton_contact: FrankaMultiNewtonContactCfg = FrankaMultiNewtonContactCfg()
 
-    # Reset bounds. At the cube's X and the 20 cm hover height, the hand can
-    # reliably reach about ±0.20 m in Y. Past that the workspace thins out.
-    # X is only a few centimeters, and the two bands stay apart and in front
-    # of the bin (bin body starts near x = 0.645).
-    cube_reset_pos_x_range: tuple[float, float] = (0.27, 0.31)
+    # Reset bounds. The cube sits farther in front of the base so the wrist
+    # is not folded against the robot. It stays ahead of the cable band
+    # (x = 0.48) and the bin body (starts near x = 0.645). At the 20 cm hover
+    # height the hand can still reach about ±0.20 m in Y.
+    cube_reset_pos_x_range: tuple[float, float] = (0.40, 0.44)
     cube_reset_pos_y_range: tuple[float, float] = (-0.20, 0.20)
 
     cable_reset_pos_x_range: tuple[float, float] = (0.48, 0.52)

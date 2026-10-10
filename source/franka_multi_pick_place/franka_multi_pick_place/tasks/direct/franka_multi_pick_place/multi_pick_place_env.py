@@ -331,7 +331,7 @@ class FrankaMultiPickPlaceEnv(DirectRLEnv):
         cube_pose = self.cube_default_root_pose[env_ids_tensor].clone()
         cable_pose = self.cable_default_root_pose[env_ids_tensor].clone()
 
-        # Cube Y stays inside the hand's reachable hover region. X is only a few centimeters.
+        # Cube Y stays inside the hand's reachable hover region. X is farther from the base.
         cube_x = sample_uniform(self.cfg.cube_reset_pos_x_range[0], self.cfg.cube_reset_pos_x_range[1], (n,), self.device)
         cube_y = sample_uniform(self.cfg.cube_reset_pos_y_range[0], self.cfg.cube_reset_pos_y_range[1], (n,), self.device)
         cube_z = torch.full((n,), 0.5 * self.cfg.cube_size, device=self.device)
